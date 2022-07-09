@@ -31,7 +31,7 @@ import re
 import math
 
 INIT_RACK_POSITION = [0, 0, 1]
-INIT_POSITION = [0, 0, 0.32]
+INIT_ORIENTATION = [0, 0, 0, 1]
 JOINT_DIRECTIONS = np.ones(12)
 
 HIP_NAME_PATTERN = re.compile(r"\w+_hip_\w+")
@@ -108,6 +108,7 @@ class A1(object):
         motor_direction=JOINT_DIRECTIONS,
         motor_offset=constants.JOINT_OFFSETS,
         reset_at_current_position=False,
+        init_position=INIT_RACK_POSITION
     ):
         self._pybullet_client = pybullet_client
         self._enable_clip_motor_commands = enable_clip_motor_commands
@@ -127,6 +128,9 @@ class A1(object):
         self._reset_at_current_position = reset_at_current_position
         self.time_step = time_step
 
+        
+        # This will be overwritten based on the terrain loaded
+        self.init_position = init_position
         self._observed_motor_torques = np.zeros(constants.NUM_MOTORS)
         self._applied_motor_torques = np.zeros(constants.NUM_MOTORS)
         self._max_force = 3.5
@@ -157,7 +161,7 @@ class A1(object):
             torque_limits=self._motor_torque_limits,
             motor_control_mode=motor_control_mode)
 
-        _, self._init_orientation_inv = self._pybullet_client.invertTransform(position=[0, 0, 0], orientation=self._GetDefaultInitOrientation())
+        _, self._init_orientation_inv = self._pybullet_client.invertTransform(position=[0, 0, 0], orientation=INIT_ORIENTATION)
 
         if self._enable_action_filter:
             self._action_filter = self._BuildActionFilter()
@@ -185,8 +189,8 @@ class A1(object):
         """
         if reload_urdf:
             self._LoadRobotURDF()
-            if self._on_rack:
-                self.rack_constraint = (self._CreateRackConstraint(self._GetDefaultInitPosition(), self._GetDefaultInitOrientation()))
+            # if self._on_rack:
+            #     self.rack_constraint = (self._CreateRackConstraint(self.init_position, INIT_ORIENTATION))
             self._BuildJointNameToIdDict()
             self._BuildUrdfIds()
             self._RemoveDefaultJointDamping()
@@ -195,7 +199,7 @@ class A1(object):
             self._RecordInertiaInfoFromURDF()
             self.ResetPose(add_constraint=True)
         else:
-            self._pybullet_client.resetBasePositionAndOrientation(self.quadruped, self._GetDefaultInitPosition(), self._GetDefaultInitOrientation())
+            self._pybullet_client.resetBasePositionAndOrientation(self.quadruped, self.init_position, INIT_ORIENTATION)
             self._pybullet_client.resetBaseVelocity(self.quadruped, [0, 0, 0], [0, 0, 0])
             self.ResetPose(add_constraint=False)
 
@@ -214,18 +218,26 @@ class A1(object):
         pass
 
     def _LoadRobotURDF(self):
-        init_position = self._GetDefaultInitPosition()
-        init_orientation = self._GetDefaultInitOrientation()
         if self._self_collision_enabled:
-            self.quadruped = self._pybullet_client.loadURDF(constants.URDF_FILEPATH, init_position, init_orientation, flags=self._pybullet_client.URDF_USE_SELF_COLLISION)
+            self.quadruped = self._pybullet_client.loadURDF(
+                constants.URDF_FILEPATH,
+                self.init_position,
+                INIT_ORIENTATION,
+                useFixedBase=self._on_rack,
+                flags=self._pybullet_client.URDF_USE_SELF_COLLISION)
         else:
-            self.quadruped = self._pybullet_client.loadURDF(constants.URDF_FILEPATH, init_position, init_orientation)
+            self.quadruped = self._pybullet_client.loadURDF(
+                constants.URDF_FILEPATH,
+                self.init_position,
+                INIT_ORIENTATION,
+                useFixedBase=self._on_rack)
 
     def _SettleDownForReset(self, default_motor_angles, reset_time):
         self.ReceiveObservation()
         if reset_time <= 0:
             return
 
+        # import pdb;pdb.set_trace()
         for _ in range(500):
             self._StepInternal(
                 constants.INIT_MOTOR_ANGLES,
@@ -293,8 +305,7 @@ class A1(object):
             elif "lower_joint" in name:
                 angle = constants.INIT_MOTOR_ANGLES[i] + constants.KNEE_JOINT_OFFSET
             else:
-                raise ValueError("The name %s is not recognized as a motor joint." %
-                                 name)
+                raise ValueError("The name %s is not recognized as a motor joint." % name)
             self._pybullet_client.resetJointState(self.quadruped,
                                                   self._joint_name_to_id[name],
                                                   angle,
@@ -426,28 +437,6 @@ class A1(object):
 
     def _GetMotorNames(self):
         return constants.JOINT_NAMES
-
-    def _GetDefaultInitPosition(self):
-        if self._on_rack:
-            return INIT_RACK_POSITION
-        else:
-            return INIT_POSITION
-
-    def _GetDefaultInitOrientation(self):
-        # The Laikago URDF assumes the initial pose of heading towards z axis,
-        # and belly towards y axis. The following transformation is to transform
-        # the Laikago initial orientation to our commonly used orientation: heading
-        # towards -x direction, and z axis is the up direction.
-        init_orientation = pyb.getQuaternionFromEuler([0., 0., 0.])
-        return init_orientation
-
-    def GetDefaultInitPosition(self):
-        """Get default initial base position."""
-        return self._GetDefaultInitPosition()
-
-    def GetDefaultInitOrientation(self):
-        """Get default initial base orientation."""
-        return self._GetDefaultInitOrientation()
 
     def GetDefaultInitJointPose(self):
         """Get default initial joint pose."""
@@ -866,16 +855,9 @@ class A1(object):
             childFrameOrientation=init_orientation)
         return fixed_constraint
 
-    def SetTimeSteps(self, action_repeat, simulation_step):
-        """Set the time steps of the control and simulation.
-
-        Args:
-            action_repeat: The number of simulation steps that the same action is
-            repeated.
-            simulation_step: The simulation time step.
-        """
-        self.time_step = simulation_step
-        self._action_repeat = action_repeat
+    def GetFootLinkIDs(self):
+        """Get list of IDs for all foot links."""
+        return self._foot_link_ids
 
     @property
     def is_safe(self):

@@ -16,5 +16,5 @@ class TerrainRandomizer:
             type=terrainType,
             columns=self._columns,
             rows=self._rows)
-        terrain_id = terrain.generate_terrain()
-        return terrain_id
+        terrain_id, terrain_type = terrain.generate_terrain()
+        return terrain_id, terrain_type

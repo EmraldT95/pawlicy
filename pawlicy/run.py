@@ -32,24 +32,24 @@ MOTOR_CONTROL_MODE_MAP = {
 }
 
 def main(_):
-    sim_params = SimulationParameters()
-    sim_params.enable_rendering = True
-    sim_params.motor_control_mode = MOTOR_CONTROL_MODE_MAP[FLAGS.motor_control_mode]
-    sim_params.reset_time = 2
-    sim_params.num_action_repeat = 10
-    sim_params.enable_action_interpolation = False
-    sim_params.enable_action_filter = False
-    sim_params.enable_clip_motor_commands = False
-    sim_params.robot_on_rack = False
+    gym_config = LocomotionGymConfig()
+    gym_config.enable_rendering = True
+    gym_config.motor_control_mode = MOTOR_CONTROL_MODE_MAP[FLAGS.motor_control_mode]
+    gym_config.reset_time = 2
+    gym_config.num_action_repeat = 10
+    gym_config.enable_action_interpolation = False
+    gym_config.enable_action_filter = False
+    gym_config.enable_clip_motor_commands = False
+    gym_config.robot_on_rack = False
+    gym_config.randomise_terrain = True
 
-    gym_config = LocomotionGymConfig(simulation_parameters=sim_params)
     sensors = [
         robot_sensors.BaseDisplacementSensor(),
         robot_sensors.IMUSensor(),
         robot_sensors.MotorAngleSensor(num_motors=constants.NUM_MOTORS),
     ]
 
-    env = a1_gym_env.A1GymEnv(gym_config=gym_config, robot_sensors=sensors, randomize_terrain=True) # task=task)
+    env = a1_gym_env.A1GymEnv(gym_config=gym_config, robot_sensors=sensors) # task=task)
     env = observation_dictionary_to_array_wrapper.ObservationDictionaryToArrayWrapper(env)
     env = trajectory_generator_wrapper_env.TrajectoryGeneratorWrapperEnv(env,
         trajectory_generator=simple_openloop.LaikagoPoseOffsetGenerator(action_limit=6.28318548203))
@@ -74,6 +74,11 @@ def main(_):
             action[dim] = env.pybullet_client.readUserDebugParameter(
             action_selector_ids[dim])
         env.step(action)
+
+        # ground = env.get_ground()
+        # print(env.pybullet_client.getContactPoints(bodyA=env._robot.quadruped, bodyB=ground))
+
+    
 
     if FLAGS.video_dir:
         p.stopStateLogging(log_id)

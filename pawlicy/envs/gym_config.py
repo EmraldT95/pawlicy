@@ -42,6 +42,7 @@ class SimulationParameters(object):
   enable_action_interpolation = attr.ib(type=bool, default=True)
   allow_knee_contact = attr.ib(type=bool, default=False)
   enable_clip_motor_commands = attr.ib(type=bool, default=True)
+  randomise_terrain = attr.ib(type=bool, default=False)
 
 
 @attr.s
@@ -53,8 +54,8 @@ class ScalarField(object):
 
 
 @attr.s
-class LocomotionGymConfig(object):
+class LocomotionGymConfig(SimulationParameters):
   """Grouped Config Parameters for LocomotionGym."""
-  simulation_parameters = attr.ib(type=SimulationParameters)
+  # simulation_parameters = attr.ib(type=SimulationParameters)
   log_path = attr.ib(type=typing.Text, default=None)
   profiling_path = attr.ib(type=typing.Text, default=None)
