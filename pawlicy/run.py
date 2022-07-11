@@ -51,8 +51,8 @@ def main(_):
 
     env = a1_gym_env.A1GymEnv(gym_config=gym_config, robot_sensors=sensors) # task=task)
     env = observation_dictionary_to_array_wrapper.ObservationDictionaryToArrayWrapper(env)
-    env = trajectory_generator_wrapper_env.TrajectoryGeneratorWrapperEnv(env,
-        trajectory_generator=simple_openloop.LaikagoPoseOffsetGenerator(action_limit=6.28318548203))
+    # env = trajectory_generator_wrapper_env.TrajectoryGeneratorWrapperEnv(env,
+    #     trajectory_generator=simple_openloop.LaikagoPoseOffsetGenerator(action_limit=-6.28318548203))
 
     action_low, action_high = env.action_space.low, env.action_space.high
     action_median = (action_low + action_high) / 2.
@@ -68,15 +68,19 @@ def main(_):
     if FLAGS.video_dir:
         log_id = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, FLAGS.video_dir)
 
-    for _ in tqdm(range(800)):
-        action = np.zeros(dim_action)
+    
+    for _ in tqdm(range(500)):
+        env.render()
+        action = np.ones(dim_action)
         for dim in range(dim_action):
-            action[dim] = env.pybullet_client.readUserDebugParameter(
-            action_selector_ids[dim])
+            action[dim] = env.pybullet_client.readUserDebugParameter(action_selector_ids[dim])
+        # env.step(env.action_space.sample())
         env.step(action)
+        # env._robot.getCameraImage()
+        
 
         # ground = env.get_ground()
-        # print(env.pybullet_client.getContactPoints(bodyA=env._robot.quadruped, bodyB=ground))
+        # print(env.pybullet_client.getContactPoints(bodyA=env._robot.quadruped, bodyB=ground["id"]))
 
     
 

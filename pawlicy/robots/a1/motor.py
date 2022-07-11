@@ -162,14 +162,11 @@ class LaikagoMotorModel(object):
     else:
       print("Undefined motor_control_mode=",motor_control_mode)
       exit()
-    motor_torques = -1 * (kp * (motor_angle - desired_motor_angles)) - kd * (
-        motor_velocity - desired_motor_velocities) + additional_torques
+    motor_torques = -1 * (kp * (motor_angle - desired_motor_angles)) - kd * (motor_velocity - desired_motor_velocities) + additional_torques
     motor_torques = self._strength_ratios * motor_torques
     if self._torque_limits is not None:
       if len(self._torque_limits) != len(motor_torques):
-        raise ValueError(
-            "Torque limits dimension does not match the number of motors.")
-      motor_torques = np.clip(motor_torques, -1.0 * self._torque_limits,
-                              self._torque_limits)
+        raise ValueError("Torque limits dimension does not match the number of motors.")
+      motor_torques = np.clip(motor_torques, -1.0 * self._torque_limits, self._torque_limits)
 
     return motor_torques, motor_torques

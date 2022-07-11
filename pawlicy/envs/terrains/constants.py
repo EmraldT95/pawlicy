@@ -13,23 +13,23 @@ FLAG_TO_FILENAME = {
 }
 
 ROBOT_INIT_POSITION = {
-    'mounts': [0, 0, .85],
-    'plane': [0, 0, 0.21],
+    'mounts': [0, 0, 0.32],
+    'plane': [0, 0, 0.32],
     # 'hills': [0, 0, 1.98],
-    'maze': [0, 0, 0.21],
-    'random': [0, 0, 0.35]
+    'maze': [0, 0, 0.32],
+    'random': [0, 0, 0.42]
 }
 
 TERRAIN_INIT_POSITION = {
-    'mounts': [0, 0, 2],
+    'mounts': [0, 0, 1.35],
     'plane': [0, 0, 0],
     # 'hills': [0, 0, 1.98],
-    'maze': [0, 0, 0],
+    'maze': [0, 0, 0.08],
     'random': [0, 0, 0]
 }
 
 MESH_SCALES = {
     'mounts': [.1, .1, 24],
-    'maze': [0.5, 0.5, 0.5],
-    'random': [.05, .05, 1]
+    'maze': [.3, .3, .2],
+    'random': [.1, .1, .3]
 }

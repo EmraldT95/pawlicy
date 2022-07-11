@@ -140,9 +140,9 @@ class A1GymEnv(gym.Env):
 				allow_knee_contact=self._gym_config.allow_knee_contact,
 				motor_control_mode=self._gym_config.motor_control_mode,
 				init_position=terrain_constants.ROBOT_INIT_POSITION[terrain_type])
-
-		# Reset the pose of the robot.
-		self._robot.Reset(reload_urdf=False, default_motor_angles=initial_motor_angles, reset_time=reset_duration)
+		else:
+			# Reset the pose of the robot.
+			self._robot.Reset(reload_urdf=False, default_motor_angles=initial_motor_angles, reset_time=reset_duration)
 
 		self._pybullet_client.setPhysicsEngineParameter(enableConeFriction=0)
 		self._env_step_counter = 0
@@ -232,14 +232,21 @@ class A1GymEnv(gym.Env):
 		return self._get_observation(), reward, done, {}
 
 	def render(self, mode='rgb_array'):
-		if mode != 'rgb_array':
-			raise ValueError('Unsupported render mode:{}'.format(mode))
+		"""Renders the rgb view from the robots perspective.
+			Currently tuned to get the view from the head of the robot"""
+
+		# if mode != 'rgb_array':
+		# 	raise ValueError('Unsupported render mode:{}'.format(mode))
 		base_pos = self._robot.GetBasePosition()
+		base_pos = [base_pos[0]+0.24, base_pos[1], base_pos[2]-0.02] # The true camera postion of the robot
 		view_matrix = self._pybullet_client.computeViewMatrixFromYawPitchRoll(
 			cameraTargetPosition=base_pos,
-			distance=self._camera_dist,
-			yaw=self._camera_yaw,
-			pitch=self._camera_pitch,
+			# distance=self._camera_dist,
+			# yaw=self._camera_yaw,
+			# pitch=self._camera_pitch,
+			distance=0.1,
+			yaw=-90,
+			pitch=10,
 			roll=0,
 			upAxisIndex=2)
 		proj_matrix = self._pybullet_client.computeProjectionMatrixFOV(

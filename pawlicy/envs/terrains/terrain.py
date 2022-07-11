@@ -23,7 +23,7 @@ class Terrain:
         # Check whether we want one the pre-existing terrain data in pybullet or to generate a random one
         if self._type == "random":
             terrain_data = [0] * self._columns * self._rows
-            noise = PerlinNoise(octaves=10, seed=random.random())
+            noise = PerlinNoise(octaves=25, seed=random.random())
             for j in range(int(self._columns / 2)):
                 for i in range(int(self._rows / 2)):
                     height = noise([j/self._columns,i/self._rows]) # Creates Perlin noise for smooth terrain generation
@@ -32,11 +32,6 @@ class Terrain:
                     terrain_data[2 * i + 1 + 2 * j * self._rows] = height
                     terrain_data[2 * i + (2 * j + 1) * self._rows] = height
                     terrain_data[2 * i + 1 + (2 * j + 1) * self._rows] = height
-
-            # Control the height of the terrain
-            terrain_data = np.array(terrain_data)
-            if terrain_data[terrain_data > 0.2].shape[0] > 0:
-                terrain_data = terrain_data * 0.5
 
             # Create the terrain in the simulator
             flags = p.GEOM_CONCAVE_INTERNAL_EDGE

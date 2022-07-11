@@ -3,7 +3,7 @@ import pybullet_data as pd
 
 import time
 
-p.connect(p.GUI)
+client_id = p.connect(p.GUI)
 p.setAdditionalSearchPath(pd.getDataPath())
 
 p.setPhysicsEngineParameter(enableConeFriction=0)
@@ -13,10 +13,12 @@ p.setTimeStep(1. / 500)
 #p.setDefaultContactERP(0)
 #urdfFlags = p.URDF_USE_SELF_COLLISION+p.URDF_USE_SELF_COLLISION_EXCLUDE_ALL_PARENTS
 urdfFlags = p.URDF_USE_SELF_COLLISION
-quadruped = p.loadURDF("laikago/laikago_toes.urdf", [0, 0, .5], [0, 0.5, 0.5, 0],
+# quadruped = p.loadURDF("laikago/laikago_toes.urdf", [0, 0, .5], [0, 0.5, 0.5, 0],
+#                        flags=urdfFlags,
+#                        useFixedBase=False)
+quadruped = p.loadURDF("a1/a1.urdf", [0, 0, .4], [0, 0, 0, 1],
                        flags=urdfFlags,
                        useFixedBase=False)
-
 #enable collision between lower legs
 
 for j in range(p.getNumJoints(quadruped)):
@@ -60,33 +62,33 @@ p.setRealTimeSimulation(0)
 
 joints = []
 
-with open(pd.getDataPath() + "/laikago/data1.txt", "r") as filestream:
-  for line in filestream:
-    print("line=", line)
-    maxForce = p.readUserDebugParameter(maxForceId)
-    currentline = line.split(",")
-    #print (currentline)
-    #print("-----")
-    frame = currentline[0]
-    t = currentline[1]
-    #print("frame[",frame,"]")
-    joints = currentline[2:14]
-    #print("joints=",joints)
-    for j in range(12):
-      targetPos = float(joints[j])
-      p.setJointMotorControl2(quadruped,
-                              jointIds[j],
-                              p.POSITION_CONTROL,
-                              jointDirections[j] * targetPos + jointOffsets[j],
-                              force=maxForce)
-    p.stepSimulation()
-    for lower_leg in lower_legs:
-      #print("points for ", quadruped, " link: ", lower_leg)
-      pts = p.getContactPoints(quadruped, -1, lower_leg)
-      #print("num points=",len(pts))
-      #for pt in pts:
-      # print(pt[9])
-    time.sleep(1. / 500.)
+# with open(pd.getDataPath() + "/laikago/data1.txt", "r") as filestream:
+#   for line in filestream:
+#     print("line=", line)
+#     maxForce = p.readUserDebugParameter(maxForceId)
+#     currentline = line.split(",")
+#     #print (currentline)
+#     #print("-----")
+#     frame = currentline[0]
+#     t = currentline[1]
+#     #print("frame[",frame,"]")
+#     joints = currentline[2:14]
+#     #print("joints=",joints)
+#     for j in range(12):
+#       targetPos = float(joints[j])
+#       p.setJointMotorControl2(quadruped,
+#                               jointIds[j],
+#                               p.POSITION_CONTROL,
+#                               jointDirections[j] * targetPos + jointOffsets[j],
+#                               force=maxForce)
+#     p.stepSimulation()
+#     for lower_leg in lower_legs:
+#       #print("points for ", quadruped, " link: ", lower_leg)
+#       pts = p.getContactPoints(quadruped, -1, lower_leg)
+#       #print("num points=",len(pts))
+#       #for pt in pts:
+#       # print(pt[9])
+#     time.sleep(1. / 500.)
 
 index = 0
 for j in range(p.getNumJoints(quadruped)):
@@ -104,6 +106,9 @@ for j in range(p.getNumJoints(quadruped)):
 
 p.setRealTimeSimulation(1)
 
+import matplotlib.pyplot as plt
+import numpy as np
+
 while (1):
 
   for i in range(len(paramIds)):
@@ -115,3 +120,27 @@ while (1):
                             p.POSITION_CONTROL,
                             jointDirections[i] * targetPos + jointOffsets[i],
                             force=maxForce)
+
+    rendered_img = None
+    if rendered_img is None:
+      rendered_img = plt.imshow(np.zeros((100, 100, 4)))
+
+      # Base information
+      proj_matrix = p.computeProjectionMatrixFOV(fov=60, aspect=1, nearVal=0.01, farVal=100)
+      pos, ori = [list(l) for l in p.getBasePositionAndOrientation(quadruped, client_id)]
+      ori = [0, 0, 0, 1]
+      # print(pos, '--------------------', ori)
+      pos[2] = 0.2
+
+      # Rotate camera direction
+      rot_mat = np.array(p.getMatrixFromQuaternion(ori)).reshape(3, 3)
+      camera_vec = np.matmul(rot_mat, [1, 0, 0])
+      up_vec = np.matmul(rot_mat, np.array([0, 0, 1]))
+      view_matrix = p.computeViewMatrix(pos, pos + camera_vec, up_vec)
+
+      # Display image
+      frame = p.getCameraImage(100, 100, view_matrix, proj_matrix)[2]
+      # frame = np.reshape(frame, (100, 100, 4))
+      # rendered_img.set_data(frame)
+      # plt.draw()
+      # plt.pause(.00001)

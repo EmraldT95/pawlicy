@@ -189,8 +189,6 @@ class A1(object):
         """
         if reload_urdf:
             self._LoadRobotURDF()
-            # if self._on_rack:
-            #     self.rack_constraint = (self._CreateRackConstraint(self.init_position, INIT_ORIENTATION))
             self._BuildJointNameToIdDict()
             self._BuildUrdfIds()
             self._RemoveDefaultJointDamping()
@@ -210,6 +208,7 @@ class A1(object):
         self._state_action_counter = 0
         self._is_safe = True
         self._last_action = None
+
         self._SettleDownForReset(default_motor_angles, reset_time)
         if self._enable_action_filter:
             self._action_filter.reset()
@@ -237,7 +236,6 @@ class A1(object):
         if reset_time <= 0:
             return
 
-        # import pdb;pdb.set_trace()
         for _ in range(500):
             self._StepInternal(
                 constants.INIT_MOTOR_ANGLES,
@@ -249,9 +247,12 @@ class A1(object):
                 self._StepInternal(
                     default_motor_angles,
                     motor_control_mode=robot_config.MotorControlMode.POSITION)
+        
+        # import pdb;pdb.set_trace()
 
     def _StepInternal(self, action, motor_control_mode):
         self.ApplyAction(action, motor_control_mode)
+        # self._pybullet_client.setRealTimeSimulation(1)
         self._pybullet_client.stepSimulation()
         self.ReceiveObservation()
         self._state_action_counter += 1
@@ -401,6 +402,7 @@ class A1(object):
         self._lower_link_ids.sort()
         self._foot_link_ids.sort()
         self._leg_link_ids.sort()
+        print(self._lower_link_ids)
 
     def _RemoveDefaultJointDamping(self):
         num_joints = self._pybullet_client.getNumJoints(self.quadruped)
@@ -830,31 +832,6 @@ class A1(object):
                 blend_alpha * np.array(self._observation_history[n_steps_ago + 1]))
         return observation
 
-    def _CreateRackConstraint(self, init_position, init_orientation):
-        """Create a constraint that keeps the chassis at a fixed frame.
-
-        This frame is defined by init_position and init_orientation.
-
-        Args:
-        init_position: initial position of the fixed frame.
-        init_orientation: initial orientation of the fixed frame in quaternion
-            format [x,y,z,w].
-
-        Returns:
-        Return the constraint id.
-        """
-        fixed_constraint = self._pybullet_client.createConstraint(
-            parentBodyUniqueId=self.quadruped,
-            parentLinkIndex=-1,
-            childBodyUniqueId=-1,
-            childLinkIndex=-1,
-            jointType=self._pybullet_client.JOINT_FIXED,
-            jointAxis=[0, 0, 0],
-            parentFramePosition=[0, 0, 0],
-            childFramePosition=init_position,
-            childFrameOrientation=init_orientation)
-        return fixed_constraint
-
     def GetFootLinkIDs(self):
         """Get list of IDs for all foot links."""
         return self._foot_link_ids
@@ -862,3 +839,21 @@ class A1(object):
     @property
     def is_safe(self):
         return self._is_safe
+
+    def getCameraImage(self):
+        # Base information
+        proj_matrix = self._pybullet_client.computeProjectionMatrixFOV(fov=80, aspect=1, nearVal=0.01, farVal=100)
+        pos, ori = [list(l) for l in self._pybullet_client.getBasePositionAndOrientation(self.quadruped)]
+        # ori = [0, 0, 0, 1]
+        # print(pos, '--------------------', ori)
+        pos[0] = 1
+        pos[2] = 0.25
+
+        # Rotate camera direction
+        rot_mat = np.array(self._pybullet_client.getMatrixFromQuaternion(ori)).reshape(3, 3)
+        camera_vec = np.matmul(rot_mat, [1, 0, 0])
+        up_vec = np.matmul(rot_mat, np.array([0, 0, 1]))
+        view_matrix = self._pybullet_client.computeViewMatrix(pos, pos + camera_vec, up_vec)
+
+        # Display image
+        frame = self._pybullet_client.getCameraImage(100, 100, view_matrix, proj_matrix)[2]
