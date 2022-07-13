@@ -103,7 +103,7 @@ class ObservationDictionaryToArrayWrapper(gym.Env):
 		observation = self._gym_env.reset(
 			initial_motor_angles=initial_motor_angles,
 			reset_duration=reset_duration)
-		return self._flatten_observation(observation)
+		return self._flatten_observation(observation, self.observation_excluded)
 
 	def step(self, action):
 		"""Steps the wrapped environment.

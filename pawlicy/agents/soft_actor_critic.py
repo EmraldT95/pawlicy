@@ -60,13 +60,13 @@ class SACAgent():
         return env
 
     def train(self):
-        #self.model.learn(total_timesteps=10000)
+        self.model.learn(total_timesteps=10000)
         
-        #print(f"Learning Complete.")
-        #obs = self.env.reset()
+        print(f"Learning Complete.")
+        obs = self.env.reset()
         for i in range(1000):
-            #action, _state = self.model.predict(obs, deterministic=True)
-            action = self.env.action_space.sample()
+            action, _state = self.model.predict(obs, deterministic=True)
+            #action = self.env.action_space.sample()
             obs, reward, done, info = self.env.step(action)
             self.env.render()
             if done:
