@@ -26,7 +26,6 @@ oauthlib==3.2.0
 opencv-python==4.6.0.66
 packaging==21.3
 pandas==1.4.3
--e git+git@github.com:EmraldT95/pawlicy.git@ab7b1516e201c17bc452ac2c8629a59187efa557#egg=Pawlicy
 perlin-noise==1.12
 Pillow==9.2.0
 protobuf==3.19.4
