@@ -154,10 +154,8 @@ class LaikagoMotorModel(object):
       assert len(motor_commands) == MOTOR_COMMAND_DIMENSION * NUM_MOTORS
       kp = motor_commands[POSITION_GAIN_INDEX::MOTOR_COMMAND_DIMENSION]
       kd = motor_commands[VELOCITY_GAIN_INDEX::MOTOR_COMMAND_DIMENSION]
-      desired_motor_angles = motor_commands[
-          POSITION_INDEX::MOTOR_COMMAND_DIMENSION]
-      desired_motor_velocities = motor_commands[
-          VELOCITY_INDEX::MOTOR_COMMAND_DIMENSION]
+      desired_motor_angles = motor_commands[POSITION_INDEX::MOTOR_COMMAND_DIMENSION]
+      desired_motor_velocities = motor_commands[VELOCITY_INDEX::MOTOR_COMMAND_DIMENSION]
       additional_torques = motor_commands[TORQUE_INDEX::MOTOR_COMMAND_DIMENSION]
     else:
       print("Undefined motor_control_mode=",motor_control_mode)

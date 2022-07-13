@@ -40,22 +40,18 @@ _LOG_BUFFER_LENGTH = 5000
 
 class A1GymEnv(gym.Env):
 	"""The gym environment for the locomotion tasks."""
-	metadata = {
-		'render.modes': ['human', 'rgb_array'],
-		'video.frames_per_second': 100
-	}
+	metadata = {"render.modes": ["human", "rgb_array"], "video.frames_per_second": 66}
 
 	def __init__(self,
-					gym_config,
-					env_sensors=None,
-					robot_sensors=None,
-					task=None):
+				gym_config,
+				robot_sensors=None,
+				task=None):
 		"""Initializes the locomotion gym environment.
 
 		Args:
 			gym_config: An instance of LocomotionGymConfig.
-			sensors: A list of environmental sensors for observation.
-				task: A callable function/class to calculate the reward and termination
+			sensors: A list of sensors for observation.
+			task: A callable function/class to calculate the reward and termination
 				condition. Takes the gym env as the argument when calling.
 
 		Raises:
@@ -74,7 +70,7 @@ class A1GymEnv(gym.Env):
 		# The action list contains the name of all actions.
 		self._build_action_space()
 		# The observation space consists of all the values from the sensors
-		self._build_observation_space(robot_sensors, env_sensors)
+		self._build_observation_space(robot_sensors)
 
 		# Hard reset initially to load the robot URDF file
 		self._hard_reset = True
@@ -238,15 +234,15 @@ class A1GymEnv(gym.Env):
 		# if mode != 'rgb_array':
 		# 	raise ValueError('Unsupported render mode:{}'.format(mode))
 		base_pos = self._robot.GetBasePosition()
-		base_pos = [base_pos[0]+0.24, base_pos[1], base_pos[2]-0.02] # The true camera postion of the robot
+		base_pos = [base_pos[0]+0.24, base_pos[1], base_pos[2]] # The true camera postion of the robot
 		view_matrix = self._pybullet_client.computeViewMatrixFromYawPitchRoll(
 			cameraTargetPosition=base_pos,
 			# distance=self._camera_dist,
 			# yaw=self._camera_yaw,
 			# pitch=self._camera_pitch,
-			distance=0.1,
+			distance=1,
 			yaw=-90,
-			pitch=10,
+			pitch=-10,
 			roll=0,
 			upAxisIndex=2)
 		proj_matrix = self._pybullet_client.computeProjectionMatrixFOV(
@@ -290,13 +286,13 @@ class A1GymEnv(gym.Env):
 		self._render_width = gym_config.render_width
 		self._render_height = gym_config.render_height
 
+		if self._num_action_repeat < 1:
+			raise ValueError('number of action repeats should be at least 1.')
+
 		# Render in GUI mode
 		if self._is_render:
 			self._pybullet_client = bullet_client.BulletClient(connection_mode=p.GUI)
 			p.configureDebugVisualizer(p.COV_ENABLE_GUI, gym_config.enable_rendering_gui)
-			if hasattr(self._task, '_draw_ref_model_alpha'):
-				self._show_reference_id = p.addUserDebugParameter("show reference", 0, 1, self._task._draw_ref_model_alpha)
-			# self._delay_id = p.addUserDebugParameter("delay", 0, 0.3, 0)
 		# Render in DIRECT mode
 		else:
 			self._pybullet_client = bullet_client.BulletClient(connection_mode=p.DIRECT)
@@ -333,9 +329,10 @@ class A1GymEnv(gym.Env):
 			self.action_space = spaces.Box(np.array(action_lower_bound),
 											np.array(action_upper_bound),
 											dtype=np.float32)
+			import pdb; pdb.set_trace()
 		elif motor_mode == robot_config.MotorControlMode.TORQUE:
 			# TODO (yuxiangy): figure out the torque limits of robots.
-			torque_limits = np.array([100] * len(action_config))
+			torque_limits = np.array([10] * len(action_config))
 			self.action_space = spaces.Box(-torque_limits,
 											torque_limits,
 											dtype=np.float32)
@@ -349,18 +346,15 @@ class A1GymEnv(gym.Env):
 											np.array(action_upper_bound),
 											dtype=np.float32)
 
-	def _build_observation_space(self, robot_sensors, env_sensors):
+	def _build_observation_space(self, robot_sensors, env_sensors=None):
 		"""Builds the action space using the different sensors and ranges
 
 		Args:
 			robot_sensors: A list of sensors that are from the robot.
 			env_sensors: A list of sensors that are from the environment
 		"""
-		# This is a workaround due to the issue in b/130128505#comment5
 		self._robot_sensors = robot_sensors
 		self._sensors = env_sensors if env_sensors is not None else list()
-		if isinstance(self._task, sensor.Sensor):
-			self._sensors.append(self._task)
 
 		# Construct the observation space from the list of sensors. Note that we
 		# will reconstruct the observation_space after the robot is created.
@@ -371,12 +365,12 @@ class A1GymEnv(gym.Env):
 		"""Returns all robot and environmental sensors."""
 		return self._robot_sensors + self._sensors
 
-	# def sensor_by_name(self, name):
-	# 	"""Returns the sensor with the given name, or None if not exist."""
-	# 	for sensor_ in self.all_sensors():
-	# 		if sensor_.get_name() == name:
-	# 			return sensor_
-	# 	return None
+	def sensor_by_name(self, name):
+		"""Returns the sensor with the given name, or None if not exist."""
+		for sensor_ in self.all_sensors():
+			if sensor_.get_name() == name:
+				return sensor_
+		return None
 
 	def get_ground(self):
 		"""Get simulation ground model."""

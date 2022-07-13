@@ -367,7 +367,7 @@ class A1(object):
           ValueError: Unknown category of the joint name.
         """
         num_joints = self._pybullet_client.getNumJoints(self.quadruped)
-        self._hip_link_ids = [-1]
+        self._hip_link_ids = []
         self._leg_link_ids = []
         self._motor_link_ids = []
         self._lower_link_ids = []
@@ -402,7 +402,6 @@ class A1(object):
         self._lower_link_ids.sort()
         self._foot_link_ids.sort()
         self._leg_link_ids.sort()
-        print(self._lower_link_ids)
 
     def _RemoveDefaultJointDamping(self):
         num_joints = self._pybullet_client.getNumJoints(self.quadruped)

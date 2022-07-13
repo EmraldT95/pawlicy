@@ -19,17 +19,11 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
-import inspect
-currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
-parentdir = os.path.dirname(os.path.dirname(currentdir))
-os.sys.path.insert(0, parentdir)
-
 import attr
 from gym import spaces
 import numpy as np
 
-from pawlicy.robots.a1 import laikago_pose_utils
+from pawlicy.robots import laikago_pose_utils
 
 class LaikagoPoseOffsetGenerator(object):
   """A trajectory generator that return constant motor angles."""

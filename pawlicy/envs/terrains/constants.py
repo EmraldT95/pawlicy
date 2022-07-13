@@ -21,15 +21,15 @@ ROBOT_INIT_POSITION = {
 }
 
 TERRAIN_INIT_POSITION = {
-    'mounts': [0, 0, 1.35],
+    'mounts': [0, 0, 0.44],
     'plane': [0, 0, 0],
     # 'hills': [0, 0, 1.98],
-    'maze': [0, 0, 0.08],
+    'maze': [0, 0, 0.04],
     'random': [0, 0, 0]
 }
 
 MESH_SCALES = {
-    'mounts': [.1, .1, 24],
-    'maze': [.3, .3, .2],
+    'mounts': [.1, .1, 8],
+    'maze': [.3, .3, .1],
     'random': [.1, .1, .3]
 }
