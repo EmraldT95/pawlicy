@@ -231,25 +231,35 @@ class A1GymEnv(gym.Env):
 		"""Renders the rgb view from the robots perspective.
 			Currently tuned to get the view from the head of the robot"""
 
+		# Base information
+		proj_matrix = self._pybullet_client.computeProjectionMatrixFOV(fov=66, aspect=1, nearVal=0.01, farVal=100)
+		base_pos = list(self._robot.GetBasePosition())
+		base_ori = list(self._robot.GetBaseOrientation())
+		base_pos[2] = base_pos[2]+0.1
+
+		# Rotate camera direction
+		rot_mat = np.array(self._pybullet_client.getMatrixFromQuaternion(base_ori)).reshape(3, 3)
+		camera_vec = np.matmul(rot_mat, [1, 0, 0]) # Target position is always the x-axis. This decides the diirection of the camera
+		up_vec = np.matmul(rot_mat, np.array([0, 0, 1])) # Which direction is considered "up"
+		view_matrix = self._pybullet_client.computeViewMatrix(base_pos, base_pos + camera_vec, up_vec)
+
 		# if mode != 'rgb_array':
 		# 	raise ValueError('Unsupported render mode:{}'.format(mode))
-		base_pos = self._robot.GetBasePosition()
-		base_pos = [base_pos[0]+0.24, base_pos[1], base_pos[2]] # The true camera postion of the robot
-		view_matrix = self._pybullet_client.computeViewMatrixFromYawPitchRoll(
-			cameraTargetPosition=base_pos,
-			# distance=self._camera_dist,
-			# yaw=self._camera_yaw,
-			# pitch=self._camera_pitch,
-			distance=1,
-			yaw=-90,
-			pitch=-10,
-			roll=0,
-			upAxisIndex=2)
-		proj_matrix = self._pybullet_client.computeProjectionMatrixFOV(
-			fov=60,
-			aspect=float(self._render_width) / self._render_height,
-			nearVal=0.1,
-			farVal=100.0)
+		# base_pos = self._robot.GetBasePosition()
+		# # base_ori = self._robot.GetTrueBaseRollPitchYaw()
+		# base_pos = [base_pos[0]+0.325, base_pos[1], base_pos[2]-0.03] # The true camera postion of the robot
+		# view_matrix = self._pybullet_client.computeViewMatrixFromYawPitchRoll(
+		# 	cameraTargetPosition=base_pos,
+		# 	distance=1,
+		# 	yaw=-90,
+		# 	pitch=-10,
+		# 	roll=0,
+		# 	upAxisIndex=2)
+		# proj_matrix = self._pybullet_client.computeProjectionMatrixFOV(
+		# 	fov=60,
+		# 	aspect=float(self._render_width) / self._render_height,
+		# 	nearVal=0.1,
+		# 	farVal=100.0)
 		(_, _, px, _, _) = self._pybullet_client.getCameraImage(
 			width=self._render_width,
 			height=self._render_height,
@@ -295,7 +305,7 @@ class A1GymEnv(gym.Env):
 			p.configureDebugVisualizer(p.COV_ENABLE_GUI, gym_config.enable_rendering_gui)
 		# Render in DIRECT mode
 		else:
-			self._pybullet_client = bullet_client.BulletClient(connection_mode=p.DIRECT)
+			self._pybullet_client = bullet_client.BulletClient()
 
 		self._pybullet_client.setAdditionalSearchPath(pd.getDataPath()) # Add the path to pybullet_data in the pybullet search path
 		self._num_bullet_solver_iterations = int(_NUM_SIMULATION_ITERATION_STEPS / self._num_action_repeat)
@@ -332,7 +342,7 @@ class A1GymEnv(gym.Env):
 			import pdb; pdb.set_trace()
 		elif motor_mode == robot_config.MotorControlMode.TORQUE:
 			# TODO (yuxiangy): figure out the torque limits of robots.
-			torque_limits = np.array([10] * len(action_config))
+			torque_limits = np.array([100] * len(action_config))
 			self.action_space = spaces.Box(-torque_limits,
 											torque_limits,
 											dtype=np.float32)
@@ -358,7 +368,11 @@ class A1GymEnv(gym.Env):
 
 		# Construct the observation space from the list of sensors. Note that we
 		# will reconstruct the observation_space after the robot is created.
-		self.observation_space = (space_utils.convert_1d_box_sensors_to_gym_space(self.all_sensors()))
+		self.observation_space = space_utils.convert_sensors_to_gym_space_dictionary(self.all_sensors())
+		self.observation_space = space_utils.flatten_observation_spaces(self.observation_space)
+		if isinstance(self.observation_space, gym.spaces.Dict):
+			self.observation_space = self.observation_space["others"]
+		# self.observation_space = space_utils.convert_1d_box_sensors_to_gym_space(self.all_sensors())
 
 	
 	def all_sensors(self):
@@ -404,15 +418,20 @@ class A1GymEnv(gym.Env):
 		Returns:
 			observations: sensory observation in the numpy array format
 		"""
-		# sensors_dict = {}
-		# for s in self.all_sensors():
-		# 	obs = s.get_observation()
-		# 	print(f"obs name {s.get_name()} type{type(obs)} shape{obs.shape}")
-		# 	sensors_dict[s.get_name()] = obs
-		# observations = collections.OrderedDict(sorted(list(sensors_dict.items()))) 
-		observations = np.concatenate([s.get_observation() for s in self.all_sensors()])
-		
+		sensors_dict = {}
+		for s in self.all_sensors():
+			sensors_dict[s.get_name()] = s.get_observation()
+
+		observations = collections.OrderedDict(sorted(list(sensors_dict.items())))
+		observations = space_utils.flatten_observation(observations)
+		if isinstance(observations, dict):
+			observations = observations["others"]
 		return observations
+		# observations = np.array([], dtype=np.float32)
+		# for s in self.all_sensors():
+		# 	observations = np.concatenate((observations, s.get_observation()))
+		# return observations
+
 
 	def get_time_since_reset(self):
 		"""Get the time passed (in seconds) since the last reset.
@@ -445,6 +464,10 @@ class A1GymEnv(gym.Env):
 	@property
 	def env_time_step(self):
 		return self._env_time_step
+		
+	@property
+	def sim_time_step(self):
+		return self._sim_time_step
 
 	@property
 	def task(self):
