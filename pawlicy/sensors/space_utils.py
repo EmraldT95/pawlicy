@@ -96,7 +96,7 @@ def convert_1d_box_sensors_to_gym_space(
   upper_bound = np.concatenate([s.get_upper_bound() for s in sensors])
   observation_space = spaces.Box(np.array(lower_bound),
                                  np.array(upper_bound),
-                                 dtype=np.float32)
+                                 dtype=np.float64)
   return observation_space
 
 

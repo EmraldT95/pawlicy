@@ -358,7 +358,7 @@ class A1GymEnv(gym.Env):
 
 		# Construct the observation space from the list of sensors. Note that we
 		# will reconstruct the observation_space after the robot is created.
-		self.observation_space = (space_utils.convert_sensors_to_gym_space_dictionary(self.all_sensors()))
+		self.observation_space = (space_utils.convert_1d_box_sensors_to_gym_space(self.all_sensors()))
 
 	
 	def all_sensors(self):
@@ -404,11 +404,14 @@ class A1GymEnv(gym.Env):
 		Returns:
 			observations: sensory observation in the numpy array format
 		"""
-		sensors_dict = {}
-		for s in self.all_sensors():
-			sensors_dict[s.get_name()] = s.get_observation()
-
-		observations = collections.OrderedDict(sorted(list(sensors_dict.items())))
+		# sensors_dict = {}
+		# for s in self.all_sensors():
+		# 	obs = s.get_observation()
+		# 	print(f"obs name {s.get_name()} type{type(obs)} shape{obs.shape}")
+		# 	sensors_dict[s.get_name()] = obs
+		# observations = collections.OrderedDict(sorted(list(sensors_dict.items()))) 
+		observations = np.concatenate([s.get_observation() for s in self.all_sensors()])
+		
 		return observations
 
 	def get_time_since_reset(self):

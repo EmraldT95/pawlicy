@@ -13,15 +13,17 @@ class WalkAlongX(object):
                 ):
         """Initializes the task."""
 
-        self._action_cost_weight = action_cost_weight
-        self._deviation_weight = deviation_weight
+        self.action_cost_weight = action_cost_weight
+        self.deviation_weight = deviation_weight
         self.enable_roll_limit = enable_roll_limit
         self.healthy_roll_limit = healthy_roll_limit
         self.enable_z_limit = enable_z_limit
         self.healthy_z_limit = healthy_z_limit
         self.healthy_reward = healthy_reward
 
-        self.current_base_pos = np.zeros(3)
+        self._current_base_pos = np.zeros(3)
+        self._last_base_pos = np.zeros(3)
+        self._cumulative_displacement = 0
 
     def __call__(self, env):
         return self.reward(env)
@@ -29,10 +31,13 @@ class WalkAlongX(object):
     def reset(self, env):
         """Resets the internal state of the task."""
         self._env = env
-
+        
         self._current_base_pos = env.robot.GetBasePosition()
+        self._last_base_pos = self._current_base_pos
+        
         self._current_base_vel = env.robot.GetBaseVelocity()
         self._alive_time_reward = 0
+        self._cumulative_displacement = 0
         self._last_action = env.last_action
         
         self._current_base_ori_euler = env.robot.GetTrueBaseRollPitchYaw()
@@ -41,12 +46,16 @@ class WalkAlongX(object):
         """Updates the internal state of the task.
         Evoked after call to a1.A1.Step(), ie after action takes effect in simulation
         """
+        self._last_base_pos = self._current_base_pos
         self._current_base_pos = env.robot.GetBasePosition()
+
         self._current_base_vel = env.robot.GetBaseVelocity()
         self._alive_time_reward = env.get_time_since_reset()
         self._last_action = env.last_action
         
-        self._current_base_ori_euler = env.robot.GetTrueBaseRollPitchYaw()   
+        self._current_base_ori_euler = env.robot.GetTrueBaseRollPitchYaw()
+        self._cumulative_displacement = 0.5 * self._cumulative_displacement + \
+            self._current_base_pos[0] - self._last_base_pos[0]
 
     def done(self, env):
         """Checks if the episode is over.
@@ -60,12 +69,13 @@ class WalkAlongX(object):
     def reward(self, env):
         """Get the reward without side effects."""
         del env
-        x_velocity_reward = self._current_base_vel[0]
+        x_cum_disp_reward = self._cumulative_displacement
+        x_velocity_reward = self._current_base_vel[0]# * self._current_base_vel[0]
 
-        action_cost = self._action_cost_weight * np.linalg.norm(self._last_action)
-        y_deviation_cost = self._deviation_weight * self.current_base_pos[1] ** 2 
+        action_cost = self.action_cost_weight * np.linalg.norm(self._last_action)
+        y_deviation_cost = self.deviation_weight * self._current_base_pos[1] ** 2 
 
-        total = x_velocity_reward + self._alive_time_reward \
+        total = x_cum_disp_reward + x_velocity_reward + self._alive_time_reward \
                 - action_cost - y_deviation_cost
         
         if self.is_healthy:
@@ -79,7 +89,7 @@ class WalkAlongX(object):
             self._current_base_ori_euler[0] > self.healthy_roll_limit):
             return False
         # Isuue - needs to account for heightfield data
-        if self.enable_z_limit and self.current_base_pos[2] < self.healthy_z_limit:
+        if self.enable_z_limit and self._current_base_pos[2] < self.healthy_z_limit:
             return False
         return True
 
