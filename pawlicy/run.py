@@ -53,10 +53,6 @@ def main(_):
     ]
 
     env = a1_gym_env.A1GymEnv(gym_config=gym_config, robot_sensors=sensors, task=task)
-    env = observation_dictionary_to_array_wrapper.ObservationDictionaryToArrayWrapper(env)
-    # This will work only for position
-    env = trajectory_generator_wrapper_env.TrajectoryGeneratorWrapperEnv(env,
-        trajectory_generator=simple_openloop.LaikagoPoseOffsetGenerator(action_limit=-6.28318548203))
 
     action_low, action_high = env.action_space.low, env.action_space.high
     action_median = (action_low + action_high) / 2.
@@ -72,11 +68,16 @@ def main(_):
     if FLAGS.video_dir:
         log_id = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, FLAGS.video_dir)
 
-    
     # for _ in tqdm(range(500)):
     try:
+        # num_joints = env._pybullet_client.getNumJoints(env.robot.quadruped)
+        # _joint_name_to_id = {}
+        # for i in range(num_joints):
+        #     joint_info = env._pybullet_client.getJointInfo(env.robot.quadruped, i)
+        #     _joint_name_to_id[joint_info[1].decode("UTF-8")] = joint_info[0]
+        # print(_joint_name_to_id)
         while(1):
-            env.render()
+            # env.render()
             action = np.ones(dim_action)
             for dim in range(dim_action):
                 action[dim] = env.pybullet_client.readUserDebugParameter(action_selector_ids[dim])

@@ -247,8 +247,6 @@ class A1(object):
                 self._StepInternal(
                     default_motor_angles,
                     motor_control_mode=robot_config.MotorControlMode.POSITION)
-        
-        # import pdb;pdb.set_trace()
 
     def _StepInternal(self, action, motor_control_mode):
         self.ApplyAction(action, motor_control_mode)
@@ -621,7 +619,7 @@ class A1(object):
         when this function is called.
         """
         self._joint_states = self._pybullet_client.getJointStates(self.quadruped, self._motor_id_list)
-        self._base_position, orientation = (self._pybullet_client.getBasePositionAndOrientation(self.quadruped))
+        self._base_position, orientation = self._pybullet_client.getBasePositionAndOrientation(self.quadruped)
         # Computes the relative orientation relative to the robot's
         # initial_orientation.
         _, self._base_orientation = self._pybullet_client.multiplyTransforms(
@@ -713,6 +711,16 @@ class A1(object):
         The orientation of minitaur's base.
         """
         return self._base_orientation
+
+    def GetBaseOrientation(self):
+        """Get the orientation of minitaur's base, represented as quaternion.
+
+        This function mimicks the noisy sensor reading and adds latency.
+        Returns:
+        The orientation of minitaur's base polluted by noise and latency.
+        """
+        return self._pybullet_client.getQuaternionFromEuler(
+            self.GetBaseRollPitchYaw())
 
     def GetBasePosition(self):
         """Get the position of minitaur's base.
@@ -838,21 +846,3 @@ class A1(object):
     @property
     def is_safe(self):
         return self._is_safe
-
-    def getCameraImage(self):
-        # Base information
-        proj_matrix = self._pybullet_client.computeProjectionMatrixFOV(fov=80, aspect=1, nearVal=0.01, farVal=100)
-        pos, ori = [list(l) for l in self._pybullet_client.getBasePositionAndOrientation(self.quadruped)]
-        # ori = [0, 0, 0, 1]
-        # print(pos, '--------------------', ori)
-        pos[0] = 1
-        pos[2] = 0.25
-
-        # Rotate camera direction
-        rot_mat = np.array(self._pybullet_client.getMatrixFromQuaternion(ori)).reshape(3, 3)
-        camera_vec = np.matmul(rot_mat, [1, 0, 0])
-        up_vec = np.matmul(rot_mat, np.array([0, 0, 1]))
-        view_matrix = self._pybullet_client.computeViewMatrix(pos, pos + camera_vec, up_vec)
-
-        # Display image
-        frame = self._pybullet_client.getCameraImage(100, 100, view_matrix, proj_matrix)[2]

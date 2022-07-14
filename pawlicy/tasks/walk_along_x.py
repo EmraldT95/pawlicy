@@ -3,8 +3,13 @@ import numpy as np
 class WalkAlongX(object):
     """Task to walk along a straight line (x-axis)"""
     def __init__(self,
+                forward_reward_cap: float = float("inf"),
+                distance_weight: float = 1.0,
+                # energy_weight=0.0005,
+                shake_weight: float = 0.005,
+                drift_weight: float = 2.0,
                 action_cost_weight: float = 0.5, 
-                deviation_weight: float = 1,
+                # deviation_weight: float = 1,
                 enable_roll_limit: bool = True,
                 healthy_roll_limit: float = np.pi * 3 / 4, 
                 enable_z_limit: bool = False,
@@ -13,8 +18,12 @@ class WalkAlongX(object):
                 ):
         """Initializes the task."""
 
+        self._forward_reward_cap = forward_reward_cap
         self._action_cost_weight = action_cost_weight
-        self._deviation_weight = deviation_weight
+        self._distance_weight = distance_weight
+        self._shake_weight = shake_weight
+        self._drift_weight = drift_weight
+        # self._deviation_weight = deviation_weight
         self.enable_roll_limit = enable_roll_limit
         self.healthy_roll_limit = healthy_roll_limit
         self.enable_z_limit = enable_z_limit
@@ -41,6 +50,7 @@ class WalkAlongX(object):
         """Updates the internal state of the task.
         Evoked after call to a1.A1.Step(), ie after action takes effect in simulation
         """
+        self.last_base_pos = self._current_base_pos
         self._current_base_pos = env.robot.GetBasePosition()
         self._current_base_vel = env.robot.GetBaseVelocity()
         self._alive_time_reward = env.get_time_since_reset()
@@ -59,18 +69,38 @@ class WalkAlongX(object):
 
     def reward(self, env):
         """Get the reward without side effects."""
-        del env
-        x_velocity_reward = self._current_base_vel[0]
+        # del env
+        # # the far the better..
+        # x_velocity_reward = self._current_base_vel[0]
 
         action_cost = self._action_cost_weight * np.linalg.norm(self._last_action)
-        y_deviation_cost = self._deviation_weight * self.current_base_pos[1] ** 2 
+        # y_deviation_cost = self._deviation_weight * self.current_base_pos[1] ** 2 
 
-        total = x_velocity_reward + self._alive_time_reward \
-                - action_cost - y_deviation_cost
-        
+        # total = x_velocity_reward + self._alive_time_reward \
+        #         - action_cost - y_deviation_cost
+
+        # the far the better..
+        forward_reward = self._current_base_pos[0]
+        # Cap the forward reward if a cap is set.
+        forward_reward = min(forward_reward, self._forward_reward_cap)
+        # Penalty for sideways translation.
+        drift_reward = -abs(self._current_base_pos[1])
+        # Penalty for sideways rotation of the body.
+        orientation = env.robot.GetBaseOrientation()
+        rot_matrix = env.pybullet_client.getMatrixFromQuaternion(orientation)
+        local_up_vec = rot_matrix[6:]
+        shake_reward = -abs(np.dot(np.asarray([1, 1, 0]), np.asarray(local_up_vec)))
+        # # Penalty for Energy consumption
+        # energy_reward = -np.abs(np.dot(env.robot.GetMotorTorques(), env.robot.GetMotorVelocities())) * env.sim_time_step
+        # objectives = [forward_reward, energy_reward, drift_reward, shake_reward]
+        # weighted_objectives = [o * w for o, w in zip(objectives, self._objective_weights)]
+        reward = forward_reward * self._distance_weight + \
+                    drift_reward * self._drift_weight + \
+                    shake_reward * self._shake_weight + \
+                    action_cost * self._action_cost_weight
         if self.is_healthy:
-            total += self.healthy_reward
-        return total
+            reward += self.healthy_reward
+        return reward 
     
     @property
     def is_healthy(self):
