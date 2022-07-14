@@ -59,7 +59,7 @@ class A1GymEnv(gym.Env):
 
 		"""
 
-		self.seed()
+		self.seed(1)
 		self._gym_config = gym_config
 		self._world_dict = {} # A dictionary containing the objects in the world other than the robot.
 		self._task = task	

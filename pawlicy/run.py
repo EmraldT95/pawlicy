@@ -1,13 +1,14 @@
 """Simple script for executing random actions on A1 robot."""
 
 
+import imp
 from pawlicy.envs import a1_gym_env
 from pawlicy.envs.gym_config import LocomotionGymConfig
 from pawlicy.robots import robot_config
 from pawlicy.robots.a1 import constants
-from pawlicy.envs.wrappers import observation_dictionary_to_array_wrapper, trajectory_generator_wrapper_env, simple_openloop
 from pawlicy.sensors import robot_sensors
 from pawlicy.tasks import walk_along_x
+from pawlicy.envs.terrains import constants as terrain_constants
 
 from absl import app
 from absl import flags
@@ -54,16 +55,19 @@ def main(_):
 
     env = a1_gym_env.A1GymEnv(gym_config=gym_config, robot_sensors=sensors, task=task)
 
+    terrain = env.world_dict["ground"]
+
     action_low, action_high = env.action_space.low, env.action_space.high
     action_median = (action_low + action_high) / 2.
     dim_action = action_low.shape[0]
     action_selector_ids = []
     for dim in range(dim_action):
-        action_selector_id = p.addUserDebugParameter(paramName='dim{}'.format(dim),
+        action_selector_id = p.addUserDebugParameter(paramName="{}".format(constants.JOINT_NAMES[dim]),
                                                     rangeMin=action_low[dim],
                                                     rangeMax=action_high[dim],
-                                                    startValue=action_median[dim])
+                                                    startValue=constants.INIT_MOTOR_ANGLES[dim])
         action_selector_ids.append(action_selector_id)
+    p.addUserDebugParameter("reset", 0, 1, 0)
 
     if FLAGS.video_dir:
         log_id = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, FLAGS.video_dir)

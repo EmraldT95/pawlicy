@@ -46,8 +46,8 @@ def build_env(randomise_terrain, motor_control_mode, enable_rendering):
     gym_config.motor_control_mode = motor_control_mode
     gym_config.reset_time = 2
     gym_config.num_action_repeat = 10
-    gym_config.enable_action_interpolation = False
-    gym_config.enable_action_filter = False
+    gym_config.enable_action_interpolation = True
+    gym_config.enable_action_filter = True
     gym_config.enable_clip_motor_commands = False
     gym_config.robot_on_rack = False
     gym_config.randomise_terrain = randomise_terrain
@@ -68,7 +68,7 @@ def build_env(randomise_terrain, motor_control_mode, enable_rendering):
 
     return env
 
-def train(env, eval_env=None, lr=1e-3, bs=64):
+def train(env, eval_env=None, lr=1e-4, bs=256):
     # Load the model.
     model = SAC(
         "MlpPolicy",
@@ -82,13 +82,20 @@ def train(env, eval_env=None, lr=1e-3, bs=64):
 
     # Train the model
     if eval_env is not None:
-        model.learn(total_timesteps=500, log_interval=4, eval_env=eval_env, eval_freq=100)
+        model.learn(total_timesteps=40000, log_interval=4, eval_env=eval_env, eval_freq=100)
     else:
-        model.learn(total_timesteps=500, log_interval=4)
+        model.learn(total_timesteps=30000, log_interval=50)
     return model
 
-def test():
-    raise NotImplementedError
+def test(env):
+    model = SAC.load(os.path.join(SAVE_DIR, "sac_emrald"))
+
+    obs = env.reset()
+    for _ in range(500):
+        action, _states = model.predict(obs, deterministic=True)
+        obs, reward, done, info = env.step(action)
+        if done:
+            obs = env.reset()
 
 if __name__ == "__main__":
     # Create the directory to save the models in.
@@ -96,11 +103,11 @@ if __name__ == "__main__":
 
     env = build_env(randomise_terrain=False,
                     motor_control_mode=MOTOR_CONTROL_MODE_MAP['Position'],
-                    enable_rendering=False)
+                    enable_rendering=True)
 
-    # eval_env = build_env(randomise_terrain=False,
+    # eval_env = build_env(randomise_terrain=True,
     #                 motor_control_mode=MOTOR_CONTROL_MODE_MAP['Position'],
-    #                 enable_rendering=False)
+    #                 enable_rendering=True)
 
     # # sample an observation from the environment
     # obs = model.env.observation_space.sample()
@@ -117,12 +124,15 @@ if __name__ == "__main__":
     env = VecNormalize(env, norm_obs=True, norm_reward=True, clip_obs=10.)
 
     # eval_env = NormalizeActionWrapper(eval_env)
+    # eval_env = TimeLimit(eval_env, max_episode_steps=300)
     # eval_env = Monitor(eval_env)
     # eval_env = DummyVecEnv([lambda: eval_env])
     # eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=True, clip_obs=10.)
 
+    # Training
     model = train(env)
     model.save(os.path.join(SAVE_DIR, "sac_emrald"))
     model.save_replay_buffer(os.path.join(SAVE_DIR, "replay_buffer_emrald"))
-    # # Check prediction before saving
-    # print("pre saved", model.predict(obs, deterministic=True))
+    
+    # Testing
+    # test(eval_env)
