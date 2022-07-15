@@ -5,7 +5,6 @@ from pawlicy.envs import a1_gym_env
 from pawlicy.envs.gym_config import LocomotionGymConfig
 from pawlicy.robots import robot_config
 from pawlicy.robots.a1 import constants
-from pawlicy.envs.wrappers import observation_dictionary_to_array_wrapper, trajectory_generator_wrapper_env, simple_openloop
 from pawlicy.sensors import robot_sensors
 from pawlicy.tasks import walk_along_x
 

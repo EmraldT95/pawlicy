@@ -112,8 +112,10 @@ class WalkAlongX(object):
     @property
     def is_healthy(self):
         # Check for counterclockwise rotation along x-axis (in radians)
-        if self.enable_roll_limit and (self._current_base_ori_euler[0] < -self.healthy_roll_limit or \
-            self._current_base_ori_euler[0] > self.healthy_roll_limit):
+        if self.enable_roll_limit and (
+            np.any(self._current_base_ori_euler < -self.healthy_roll_limit) or \
+            np.any(self._current_base_ori_euler > self.healthy_roll_limit)
+            ):
             return False
         # Isuue - needs to account for heightfield data
         if self.enable_z_limit and self._current_base_pos[2] < self.healthy_z_limit:
