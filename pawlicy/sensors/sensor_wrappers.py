@@ -30,7 +30,7 @@ import collections
 import numpy as np
 import typing
 
-from motion_imitation.envs.sensors import sensor
+from pawlicy.sensors import sensor
 
 _ARRAY = typing.Iterable[float] # pylint: disable=invalid-name
 

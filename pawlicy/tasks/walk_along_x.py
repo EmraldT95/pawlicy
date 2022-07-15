@@ -64,8 +64,6 @@ class WalkAlongX(object):
             If the robot base becomes unstable (based on orientation), the episode
             terminates early.
         """
-        # del env
-        # import pdb;pdb.set_trace()
         return not self.is_healthy(env)
 
     def reward(self, env):
@@ -122,24 +120,21 @@ class WalkAlongX(object):
         # Checking if robot is in contact with the ground
         foot_links = env.robot.GetFootLinkIDs()
         ground = env.get_ground()
-        contact_fall = False
         # Skip the first env step
         if env.env_step_counter > 0:
             robot_ground_contacts = env.pybullet_client.getContactPoints(bodyA=env.robot.quadruped, bodyB=ground["id"])
             for contact in robot_ground_contacts:
                 # Only the toes of the robot should in contact with the ground
                 if contact[3] not in foot_links:
-                    print("contact_fail")
-                    contact_fall = True
+                    # print("contact_fail")
                     return False
 
-            # [-0.00339566,  0.05969767,  0.01826597] - The initial Roll, Pitch and Yaw
             # The robot shouldn't be flipped, so limit the Roll and Pitch
             if self._current_base_ori_euler[0] > self.roll_threshold or self._current_base_ori_euler[0] < -self.roll_threshold:
-                print("roll_fail")
+                # print("roll_fail")
                 return False
             if self._current_base_ori_euler[1] > self.pitch_threshold or self._current_base_ori_euler[1] < -self.pitch_threshold:
-                print("pitch_fail")
+                # print("pitch_fail")
                 return False
 
             # Issue - needs to account for heightfield data
