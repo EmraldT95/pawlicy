@@ -14,7 +14,6 @@ import pathlib
 from typing import Union
 import argparse
 import numpy as np
-from pkg_resources import parse_requirements
 from stable_baselines3 import SAC
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
@@ -37,12 +36,12 @@ SAVE_DIR = path.parents[1].resolve().joinpath("saved/models").as_posix()
 def parse_arguements():
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--mode', "-m", default="valid", choices=["train", "valid"], type=str, help='To set to training or validation mode')
-    parser.add_argument('--steps_per_ep', "-spe", default=1000, type=int, help='maximum steps per episode')
+    parser.add_argument('--steps_per_ep', "-spe", default=10000, type=int, help='maximum steps per episode')
     parser.add_argument('--render_mode', "-rm", default=None, type=Union[bool, None], help='To override rendering behaviour')
 
     parser.add_argument('--author', "-au", default="rpanackal", type=str, help='name of author')
     parser.add_argument('--exp_suffix', "-s", default="", type=str, help='appends to experiment name')
-    parser.add_argument('--total_num_steps', "-tns", default=10000, type=int, help='total number of training steps')
+    parser.add_argument('--total_num_steps', "-tns", default=100000, type=int, help='total number of training steps')
     
     parser.add_argument('--total_num_eps', "-tne", default=20, type=int, help='total number of validation episodes')
     parser.add_argument('--load_exp_name', "-l", default="sac_rpanackal_tns100000", type=str, help='name of experiment to be validated')
@@ -85,7 +84,7 @@ def setup_env(args, enable_rendering=False):
     # Normalize the action space
     env = NormalizeActionWrapper(env)
     # Set a time limit for each episode
-    env = TimeLimit(env, max_episode_steps=args.total_num_steps)
+    env = TimeLimit(env, max_episode_steps=args.steps_per_ep)
     # To monitor training stats
     env = Monitor(env)
     check_env(env, warn=True)
