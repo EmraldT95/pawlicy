@@ -62,19 +62,19 @@ def main():
 
     args = arg_parser.parse_args()
 
-    env = build_env(randomise_terrain=args.randomise_terrain,
+    # Training
+    if args.mode == "train":
+        env = build_env(randomise_terrain=args.randomise_terrain,
                     motor_control_mode=MOTOR_CONTROL_MODE_MAP["Position"],
                     enable_rendering=args.visualize)
 
-    # Setup the trainer
-    local_trainer = Trainer(env, "SAC")
+        # Train the agent
+        local_trainer = Trainer(env, "SAC")
+        _, hyperparameters = utils.read_hyperparameters("SAC", 1, {"learning_starts": 2000})
+        model = local_trainer.train(hyperparameters, args.total_timesteps)
 
-    # Training
-    _, hyperparameters = utils.read_hyperparameters("SAC", 1, {"learning_starts": 2000})
-    model = local_trainer.train(hyperparameters, args.total_timesteps)
-
-    # Save the model after training
-    local_trainer.save_model(SAVE_DIR)
+        # Save the model after training
+        local_trainer.save_model(SAVE_DIR)
 
     # Testing
     if args.mode == "test":
