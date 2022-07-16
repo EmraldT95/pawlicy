@@ -532,8 +532,7 @@ class A1(object):
         del cls
         return constants
 
-    def ComputeMotorAnglesFromFootLocalPosition(self, leg_id,
-                                                foot_local_position):
+    def ComputeMotorAnglesFromFootLocalPosition(self, leg_id, foot_local_position):
         """Use IK to compute the motor angles, given the foot link's local position.
 
         Args:
@@ -842,6 +841,28 @@ class A1(object):
     def GetFootLinkIDs(self):
         """Get list of IDs for all foot links."""
         return self._foot_link_ids
+
+    def GetFootContacts(self):
+        """Get minitaur's foot contact situation with the ground.
+
+        Returns:
+            A list of 4 booleans. The ith boolean is True if leg i is in contact with
+            ground.
+        """
+        all_contacts = self._pybullet_client.getContactPoints(bodyA=self.quadruped)
+
+        contacts = [False, False, False, False]
+        for contact in all_contacts:
+            # Ignore self contacts
+            if contact[constants._BODY_B_FIELD_NUMBER] == self.quadruped:
+                continue
+            try:
+                toe_link_index = self._foot_link_ids.index(contact[constants._LINK_A_FIELD_NUMBER])
+                contacts[toe_link_index] = True
+            except ValueError:
+                continue
+
+        return contacts
 
     @property
     def is_safe(self):
