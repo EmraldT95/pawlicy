@@ -55,7 +55,7 @@ def setup_env(args, enable_rendering=False):
 
     gym_config = LocomotionGymConfig()
     gym_config.enable_rendering = enable_rendering
-    gym_config.motor_control_mode = MOTOR_CONTROL_MODE_MAP['Torque']
+    gym_config.motor_control_mode = MOTOR_CONTROL_MODE_MAP['Position']
     gym_config.reset_time = 2
     gym_config.num_action_repeat = 10
     gym_config.enable_action_interpolation = False
