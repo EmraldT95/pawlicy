@@ -24,10 +24,9 @@ import pybullet as p
 import pybullet_utils.bullet_client as bullet_client
 import pybullet_data as pd
 
-
 from pawlicy.robots import robot_config
-from pawlicy.robots.a1 import a1
-from pawlicy.sensors import sensor
+from pawlicy.robots.a1 import A1
+# from pawlicy.robots.a1.a1_simple import A1
 from pawlicy.sensors import space_utils
 
 from pawlicy.envs.terrains import constants as terrain_constants
@@ -123,17 +122,15 @@ class A1GymEnv(gym.Env):
 			}
 
 			# Rebuild the robot
-			self._robot = a1.A1(
+			self._robot = A1(
 				pybullet_client=self._pybullet_client,
 				enable_clip_motor_commands=self._gym_config.enable_clip_motor_commands,
 				action_repeat=self._num_action_repeat,
 				time_step=self._sim_time_step,
 				sensors=self._robot_sensors,
-				on_rack=self._on_rack,
 				enable_action_interpolation=self._gym_config.enable_action_interpolation,
 				enable_action_filter=self._gym_config.enable_action_filter,
 				reset_time=self._gym_config.reset_time,
-				allow_knee_contact=self._gym_config.allow_knee_contact,
 				motor_control_mode=self._gym_config.motor_control_mode,
 				init_position=terrain_constants.ROBOT_INIT_POSITION[terrain_type])
 		else:
@@ -281,7 +278,6 @@ class A1GymEnv(gym.Env):
 
 	def _configureSimulator(self, gym_config):
 		"""Configures pybullet with the provided settings"""
-		self._on_rack = gym_config.robot_on_rack # Whether the robot is on rack or not
 		self._is_render = gym_config.enable_rendering # Whether to render the GUI or not
 		self._num_action_repeat = gym_config.num_action_repeat # The number of simulation steps that the same action is repeated.
 		self._sim_time_step = gym_config.sim_time_step_s # The simulation time step 
@@ -331,7 +327,7 @@ class A1GymEnv(gym.Env):
 		motor_mode = self._gym_config.motor_control_mode
 		action_upper_bound = []
 		action_lower_bound = []
-		action_config = a1.A1.ACTION_CONFIG
+		action_config = A1.ACTION_CONFIG
 		if motor_mode == robot_config.MotorControlMode.HYBRID:
 			for action in action_config:
 				action_upper_bound.extend([6.28] * robot_config.HYBRID_ACTION_DIMENSION)
@@ -339,7 +335,6 @@ class A1GymEnv(gym.Env):
 			self.action_space = spaces.Box(np.array(action_lower_bound),
 											np.array(action_upper_bound),
 											dtype=np.float32)
-			import pdb; pdb.set_trace()
 		elif motor_mode == robot_config.MotorControlMode.TORQUE:
 			# TODO (yuxiangy): figure out the torque limits of robots.
 			torque_limits = np.array([100] * len(action_config))
@@ -395,9 +390,6 @@ class A1GymEnv(gym.Env):
 		self._world_dict['ground'] = terrain_id
 
 	def _termination(self):
-		if not self._robot.is_safe:
-			return True
-
 		if self._task and hasattr(self._task, 'done'):
 			return self._task.done(self)
 

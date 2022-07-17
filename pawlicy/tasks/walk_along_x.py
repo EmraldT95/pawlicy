@@ -86,8 +86,8 @@ class WalkAlongX(object):
         forward_reward = self._current_base_pos[0] - self._init_base_pos[0]
         # Cap the forward reward if a cap is set.
         forward_reward = min(forward_reward, self._forward_reward_cap)
-        # Rewarded if moving forward, else give only 20% of actual reward
-        forward_reward = forward_reward * (self._distance_weight if forward_reward > 0 else self._distance_weight * 0.2)
+        # Rewarded if moving forward, else penalize
+        forward_reward = forward_reward * (self._distance_weight if forward_reward > 0 else -0.2)
 
         # Cost of executing action
         action_cost = self._action_cost_weight * np.linalg.norm(self._last_action)
@@ -134,23 +134,20 @@ class WalkAlongX(object):
                     return False
 
             # The robot shouldn't be flipped, so limit the Roll and Pitch
-            if self._current_base_ori_euler[0] > self.roll_threshold or self._current_base_ori_euler[0] < -self.roll_threshold:
-                # print("roll_fail")
-                return False
-            if self._current_base_ori_euler[1] > self.pitch_threshold or self._current_base_ori_euler[1] < -self.pitch_threshold:
-                # print("pitch_fail")
-                return False
+            # if self._current_base_ori_euler[0] > self.roll_threshold or self._current_base_ori_euler[0] < -self.roll_threshold:
+            #     return False
+            # if self._current_base_ori_euler[1] > self.pitch_threshold or self._current_base_ori_euler[1] < -self.pitch_threshold:
+            #     return False
 
             # Issue - needs to account for heightfield data
             if self.enable_z_limit:
-                # z_upper_limit = self._init_base_pos[2] + self.healthy_z_limit * 2
-                # z_lower_limit = self._init_base_pos[2] - self.healthy_z_limit
-                # # Random terrains don't have fixed heights in every run. Hence initial position of
-                # # the robot is generally higher than usual. Taking that under consideration
-                # if env.world_dict["ground"]["type"] != "plain":
-                #     z_lower_limit -= 0.1
-                # Robot shouldn't be below the limit
-                if self._current_base_pos[2] < 0.02:
+                z_upper_limit = self._init_base_pos[2] + self.healthy_z_limit * 2
+                # Random terrains don't have fixed heights in every run. Hence initial position of
+                # the robot is generally higher than usual. Taking that under consideration
+                if env.world_dict["ground"]["type"] != "plain":
+                    z_upper_limit += 0.1
+                # Robot shouldn't be above the limit
+                if self._current_base_pos[2] > z_upper_limit:
                     # print("z_fail: Current=", self._current_base_pos[2], ",\tLimit=", z_lower_limit)
                     return False
         return True

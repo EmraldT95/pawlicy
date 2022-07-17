@@ -1,3 +1,4 @@
+from pawlicy import learning
 from pawlicy.envs import A1GymEnv
 from pawlicy.envs.gym_config import LocomotionGymConfig
 from pawlicy.robots import robot_config
@@ -27,7 +28,6 @@ def build_env(randomise_terrain, motor_control_mode, enable_rendering):
         randomise_terrain: Whether to randomize terrain or not
         motor_control_mode: Position, Torque or Hybrid
         enable_rendering: Whether to configure pybullet in GUI mode or DIRECT mode
-        robot_on_rack: Whether robot is on rack or not
     """
     gym_config = LocomotionGymConfig()
     gym_config.enable_rendering = enable_rendering
@@ -35,9 +35,8 @@ def build_env(randomise_terrain, motor_control_mode, enable_rendering):
     gym_config.reset_time = 2
     gym_config.num_action_repeat = 10
     gym_config.enable_action_interpolation = True
-    gym_config.enable_action_filter = True
-    gym_config.enable_clip_motor_commands = False
-    gym_config.robot_on_rack = False
+    gym_config.enable_action_filter = False
+    gym_config.enable_clip_motor_commands = True
     gym_config.randomise_terrain = randomise_terrain
 
     task = walk_along_x.WalkAlongX()
@@ -56,32 +55,51 @@ def main():
 
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("--visualize", dest="visualize", type=bool, default=False)
-    arg_parser.add_argument("--mode", dest="mode", type=str, default="train")
+    arg_parser.add_argument("--motor_control_mode", dest="motor_control_mode", type=str, default="Position")
+    arg_parser.add_argument("--train", dest="train", type=bool, default=False)
     arg_parser.add_argument("--randomise_terrain", dest="randomise_terrain", type=bool, default=False)
-    arg_parser.add_argument("--total_timesteps", dest="total_timesteps", type=int, default=20000)
-
+    arg_parser.add_argument("--total_timesteps", dest="total_timesteps", type=int, default=int(1e6))
     args = arg_parser.parse_args()
 
     # Training
-    if args.mode == "train":
+    if args.train:
         env = build_env(randomise_terrain=args.randomise_terrain,
-                    motor_control_mode=MOTOR_CONTROL_MODE_MAP["Position"],
+                    motor_control_mode=MOTOR_CONTROL_MODE_MAP[args.motor_control_mode],
                     enable_rendering=args.visualize)
 
+        # Need to do this because our current pybullet setup can have only one client with GUI enabled
+        if args.visualize:
+            eval_env = None
+        else:
+            eval_env = build_env(randomise_terrain=args.randomise_terrain,
+                        motor_control_mode=MOTOR_CONTROL_MODE_MAP[args.motor_control_mode],
+                        enable_rendering=args.visualize)
+
+        # Get the trainer
+        local_trainer = Trainer(env, eval_env, "SAC")
+
+        # The hyperparameters to override/add for the specific algorithm
+        # (Check 'learning/hyperparams.yml' for default values)
+        override_hyperparams = {
+            "n_timesteps": args.total_timesteps,
+            "learning_starts": 1000,
+            "learning_rate_scheduler": "cosine", # Uses the default learning rate as the initial value
+            "learning_rate": int(1e-3),
+        }
+
         # Train the agent
-        local_trainer = Trainer(env, "SAC")
-        _, hyperparameters = utils.read_hyperparameters("SAC", 1, {"learning_starts": 2000})
-        model = local_trainer.train(hyperparameters, args.total_timesteps)
+        _ = local_trainer.train(override_hyperparams)
 
         # Save the model after training
         local_trainer.save_model(SAVE_DIR)
 
     # Testing
-    if args.mode == "test":
+    else:
         test_env = build_env(randomise_terrain=args.randomise_terrain,
-                    motor_control_mode=MOTOR_CONTROL_MODE_MAP["Position"],
-                    enable_rendering=args.visualize)
-        Trainer(test_env, "SAC").test(SAVE_DIR)
+                    motor_control_mode=MOTOR_CONTROL_MODE_MAP[args.motor_control_mode],
+                    enable_rendering=True)
+                    
+        Trainer(test_env, algorithm="SAC").test(SAVE_DIR)
 
 if __name__ == "__main__":
     main()

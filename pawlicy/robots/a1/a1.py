@@ -22,7 +22,7 @@ from pawlicy.robots.a1 import kinematics, motor
 from pawlicy.robots.a1 import constants
 from pawlicy.robots.a1 import action_filter
 
-import pybullet as pyb  # pytype: disable=import-error
+import pybullet as pyb
 import numpy as np
 
 import copy
@@ -94,17 +94,14 @@ class A1(object):
         action_repeat=10,
         sensors=None,
         control_latency=0.002,
-        on_rack=False,
         enable_action_interpolation=True,
         enable_action_filter=False,
         reset_time=1,
-        allow_knee_contact=False,
         self_collision_enabled=False,
         motor_control_mode=robot_config.MotorControlMode.POSITION,
         motor_torque_limits=None,
         pd_latency=0.0,
         observation_noise_stdev=constants.SENSOR_NOISE_STDDEV,
-        motor_overheat_protection=False,
         motor_direction=JOINT_DIRECTIONS,
         motor_offset=constants.JOINT_OFFSETS,
         reset_at_current_position=False,
@@ -115,16 +112,13 @@ class A1(object):
         self._action_repeat = action_repeat
         self.SetAllSensors(sensors if sensors is not None else list())
         self._control_latency = control_latency
-        self._on_rack = on_rack
         self._enable_action_interpolation = enable_action_interpolation
         self._enable_action_filter = enable_action_filter
-        self._allow_knee_contact = allow_knee_contact
         self._self_collision_enabled = self_collision_enabled
         self._motor_direction = motor_direction
         self._motor_offset = motor_offset
         self._pd_latency = pd_latency
         self._observation_noise_stdev = observation_noise_stdev
-        self._motor_overheat_protection = motor_overheat_protection
         self._reset_at_current_position = reset_at_current_position
         self.time_step = time_step
 
@@ -133,14 +127,11 @@ class A1(object):
         self.init_position = init_position
         self._observed_motor_torques = np.zeros(constants.NUM_MOTORS)
         self._applied_motor_torques = np.zeros(constants.NUM_MOTORS)
-        self._max_force = 3.5
         self._observation_history = collections.deque(maxlen=100)
         self._control_observation = []
-        self._chassis_link_ids = [-1]
         self._leg_link_ids = []
-        self._motor_link_ids = []
+        self._upper_link_ids = []
         self._foot_link_ids = []
-        self._is_safe = True
         self._last_action = None
         self._motor_kps = np.asarray(constants.MOTOR_KP)
         self._motor_kds = np.asarray(constants.MOTOR_KD)
@@ -166,9 +157,6 @@ class A1(object):
         if self._enable_action_filter:
             self._action_filter = self._BuildActionFilter()
 
-        if self._on_rack and self._reset_at_current_position:
-            raise ValueError("on_rack and reset_at_current_position cannot be enabled together")
-
         # reset_time=-1.0 means skipping the reset motion.
         # See Reset for more details.
         self.Reset(reset_time=reset_time)
@@ -193,20 +181,16 @@ class A1(object):
             self._BuildUrdfIds()
             self._RemoveDefaultJointDamping()
             self._BuildMotorIdList()
-            self._RecordMassInfoFromURDF()
-            self._RecordInertiaInfoFromURDF()
             self.ResetPose(add_constraint=True)
         else:
             self._pybullet_client.resetBasePositionAndOrientation(self.quadruped, self.init_position, INIT_ORIENTATION)
             self._pybullet_client.resetBaseVelocity(self.quadruped, [0, 0, 0], [0, 0, 0])
             self.ResetPose(add_constraint=False)
 
-        self._overheat_counter = np.zeros(constants.NUM_MOTORS)
         self._motor_enabled_list = [True] * constants.NUM_MOTORS
         self._observation_history.clear()
         self._step_counter = 0
         self._state_action_counter = 0
-        self._is_safe = True
         self._last_action = None
 
         self._SettleDownForReset(default_motor_angles, reset_time)
@@ -222,14 +206,12 @@ class A1(object):
                 constants.URDF_FILEPATH,
                 self.init_position,
                 INIT_ORIENTATION,
-                useFixedBase=self._on_rack,
                 flags=self._pybullet_client.URDF_USE_SELF_COLLISION)
         else:
             self.quadruped = self._pybullet_client.loadURDF(
                 constants.URDF_FILEPATH,
                 self.init_position,
-                INIT_ORIENTATION,
-                useFixedBase=self._on_rack)
+                INIT_ORIENTATION)
 
     def _SettleDownForReset(self, default_motor_angles, reset_time):
         self.ReceiveObservation()
@@ -250,7 +232,6 @@ class A1(object):
 
     def _StepInternal(self, action, motor_control_mode):
         self.ApplyAction(action, motor_control_mode)
-        # self._pybullet_client.setRealTimeSimulation(1)
         self._pybullet_client.stepSimulation()
         self.ReceiveObservation()
         self._state_action_counter += 1
@@ -354,9 +335,22 @@ class A1(object):
     def _BuildJointNameToIdDict(self):
         num_joints = self._pybullet_client.getNumJoints(self.quadruped)
         self._joint_name_to_id = {}
+        self._joint_lower_limits = []
+        self._joint_upper_limits = []
+        self._joint_max_force = []
+        self._joint_max_velocity = []
+        
         for i in range(num_joints):
             joint_info = self._pybullet_client.getJointInfo(self.quadruped, i)
             self._joint_name_to_id[joint_info[1].decode("UTF-8")] = joint_info[0]
+
+            # Getting lower limit, upper limit, max force and max velocity of each joint for building the actions the environment
+            if joint_info[1].decode("UTF-8") in constants.JOINT_NAMES:
+                self._joint_lower_limits.append(joint_info[8])
+                self._joint_upper_limits.append(joint_info[9])
+                self._joint_max_force.append(joint_info[10])
+                self._joint_max_velocity.append(joint_info[11])
+            
 
     def _BuildUrdfIds(self):
         """Build the link Ids from its name in the URDF file.
@@ -367,7 +361,7 @@ class A1(object):
         num_joints = self._pybullet_client.getNumJoints(self.quadruped)
         self._hip_link_ids = []
         self._leg_link_ids = []
-        self._motor_link_ids = []
+        self._upper_link_ids = []
         self._lower_link_ids = []
         self._foot_link_ids = []
         self._imu_link_ids = []
@@ -379,7 +373,7 @@ class A1(object):
             if HIP_NAME_PATTERN.match(joint_name):
                 self._hip_link_ids.append(joint_id)
             elif UPPER_NAME_PATTERN.match(joint_name):
-                self._motor_link_ids.append(joint_id)
+                self._upper_link_ids.append(joint_id)
             # We either treat the lower leg or the toe as the foot link, depending on
             # the urdf version used.
             elif LOWER_NAME_PATTERN.match(joint_name):
@@ -396,7 +390,7 @@ class A1(object):
 
         #assert len(self._foot_link_ids) == NUM_LEGS
         self._hip_link_ids.sort()
-        self._motor_link_ids.sort()
+        self._upper_link_ids.sort()
         self._lower_link_ids.sort()
         self._foot_link_ids.sort()
         self._leg_link_ids.sort()
@@ -409,30 +403,6 @@ class A1(object):
 
     def _BuildMotorIdList(self):
         self._motor_id_list = [self._joint_name_to_id[motor_name] for motor_name in self._GetMotorNames()]
-
-    def _RecordMassInfoFromURDF(self):
-        """Records the mass information from the URDF file."""
-        self._base_mass_urdf = []
-        for chassis_id in self._chassis_link_ids:
-            self._base_mass_urdf.append(self._pybullet_client.getDynamicsInfo(self.quadruped, chassis_id)[0])
-        self._leg_masses_urdf = []
-        for leg_id in self._leg_link_ids:
-            self._leg_masses_urdf.append(self._pybullet_client.getDynamicsInfo(self.quadruped, leg_id)[0])
-        for motor_id in self._motor_link_ids:
-            self._leg_masses_urdf.append(self._pybullet_client.getDynamicsInfo(self.quadruped, motor_id)[0])
-
-    def _RecordInertiaInfoFromURDF(self):
-        """Record the inertia of each body from URDF file."""
-        self._link_urdf = []
-        num_bodies = self._pybullet_client.getNumJoints(self.quadruped)
-        for body_id in range(-1, num_bodies):  # -1 is for the base link.
-            inertia = self._pybullet_client.getDynamicsInfo(self.quadruped, body_id)[2]
-            self._link_urdf.append(inertia)
-        # We need to use id+1 to index self._link_urdf because it has the base
-        # (index = -1) at the first element.
-        self._base_inertia_urdf = [self._link_urdf[chassis_id + 1] for chassis_id in self._chassis_link_ids]
-        self._leg_inertia_urdf = [self._link_urdf[leg_id + 1] for leg_id in self._leg_link_ids]
-        self._leg_inertia_urdf.extend([self._link_urdf[motor_id + 1] for motor_id in self._motor_link_ids])
 
     def _GetMotorNames(self):
         return constants.JOINT_NAMES
@@ -464,42 +434,19 @@ class A1(object):
         qdot_true = self.GetTrueMotorVelocities()
         actual_torque, observed_torque = self._motor_model.convert_to_torque(motor_commands, q, qdot, qdot_true, control_mode)
 
-        # May turn off the motor
-        self._ApplyOverheatProtection(actual_torque)
-
         # The torque is already in the observation space because we use
         # GetMotorAngles and GetMotorVelocities.
         self._observed_motor_torques = observed_torque
 
         # Transform into the motor space when applying the torque.
         self._applied_motor_torque = np.multiply(actual_torque, self._motor_direction)
-        motor_ids = []
-        motor_torques = []
-
-        for motor_id, motor_torque, motor_enabled in zip(self._motor_id_list, self._applied_motor_torque, self._motor_enabled_list):
-            if motor_enabled:
-                motor_ids.append(motor_id)
-                motor_torques.append(motor_torque)
-            else:
-                motor_ids.append(motor_id)
-                motor_torques.append(0)
-        self._SetMotorTorqueByIds(motor_ids, motor_torques)
+        self._SetMotorTorqueByIds(self._motor_id_list, self._applied_motor_torque)
 
     def _GetPDObservation(self):
         pd_delayed_observation = self._GetDelayedObservation(self._pd_latency)
         q = pd_delayed_observation[0:constants.NUM_MOTORS]
         qdot = pd_delayed_observation[constants.NUM_MOTORS:2 * constants.NUM_MOTORS]
         return (np.array(q), np.array(qdot))
-
-    def _ApplyOverheatProtection(self, actual_torque):
-        if self._motor_overheat_protection:
-            for i in range(constants.NUM_MOTORS):
-                if abs(actual_torque[i]) > OVERHEAT_SHUTDOWN_TORQUE:
-                    self._overheat_counter[i] += 1
-                else:
-                    self._overheat_counter[i] = 0
-                if (self._overheat_counter[i] > OVERHEAT_SHUTDOWN_TIME / self.time_step):
-                    self._motor_enabled_list[i] = False
 
     def _SetMotorTorqueByIds(self, motor_ids, torques):
         self._pybullet_client.setJointMotorControlArray(
@@ -863,7 +810,3 @@ class A1(object):
                 continue
 
         return contacts
-
-    @property
-    def is_safe(self):
-        return self._is_safe

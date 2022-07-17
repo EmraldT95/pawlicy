@@ -145,45 +145,45 @@ while (1):
       # plt.draw()
       # plt.pause(.00001)
 
-# terrain = env.world_dict["ground"]
-#     action_low, action_high = env.action_space.low, env.action_space.high
-#     action_median = (action_low + action_high) / 2.
-#     dim_action = action_low.shape[0]
-#     action_selector_ids = []
-#     for dim in range(dim_action):
-#         action_selector_id = p.addUserDebugParameter(paramName="{}".format(constants.JOINT_NAMES[dim]),
-#                                                     rangeMin=action_low[dim],
-#                                                     rangeMax=action_high[dim],
-#                                                     startValue=constants.INIT_MOTOR_ANGLES[dim])
-#         action_selector_ids.append(action_selector_id)
-#     p.addUserDebugParameter("reset", 0, 1, 0)
+terrain = env.world_dict["ground"]
+    action_low, action_high = env.action_space.low, env.action_space.high
+    action_median = (action_low + action_high) / 2.
+    dim_action = action_low.shape[0]
+    action_selector_ids = []
+    for dim in range(dim_action):
+        action_selector_id = p.addUserDebugParameter(paramName="{}".format(constants.JOINT_NAMES[dim]),
+                                                    rangeMin=action_low[dim],
+                                                    rangeMax=action_high[dim],
+                                                    startValue=constants.INIT_MOTOR_ANGLES[dim])
+        action_selector_ids.append(action_selector_id)
+    p.addUserDebugParameter("reset", 0, 1, 0)
 
-#     if FLAGS.video_dir:
-#         log_id = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, FLAGS.video_dir)
+    if FLAGS.video_dir:
+        log_id = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, FLAGS.video_dir)
 
-#     # for _ in tqdm(range(500)):
-#     try:
-#         # num_joints = env._pybullet_client.getNumJoints(env.robot.quadruped)
-#         # _joint_name_to_id = {}
-#         # for i in range(num_joints):
-#         #     joint_info = env._pybullet_client.getJointInfo(env.robot.quadruped, i)
-#         #     _joint_name_to_id[joint_info[1].decode("UTF-8")] = joint_info[0]
-#         # print(_joint_name_to_id)
-#         while(1):
-#             # env.render()
-#             action = np.ones(dim_action)
-#             for dim in range(dim_action):
-#                 action[dim] = env.pybullet_client.readUserDebugParameter(action_selector_ids[dim])
-#             # env.step(env.action_space.sample())
-#             env.step(action)
-#     # env._robot.getCameraImage()
-#     except ValueError:
-#         env.close()    
+    # for _ in tqdm(range(500)):
+    try:
+        # num_joints = env._pybullet_client.getNumJoints(env.robot.quadruped)
+        # _joint_name_to_id = {}
+        # for i in range(num_joints):
+        #     joint_info = env._pybullet_client.getJointInfo(env.robot.quadruped, i)
+        #     _joint_name_to_id[joint_info[1].decode("UTF-8")] = joint_info[0]
+        # print(_joint_name_to_id)
+        while(1):
+            # env.render()
+            action = np.ones(dim_action)
+            for dim in range(dim_action):
+                action[dim] = env.pybullet_client.readUserDebugParameter(action_selector_ids[dim])
+            # env.step(env.action_space.sample())
+            env.step(action)
+    # env._robot.getCameraImage()
+    except ValueError:
+        env.close()    
 
-#         # ground = env.get_ground()
-#         # print(env.pybullet_client.getContactPoints(bodyA=env._robot.quadruped, bodyB=ground["id"]))
+        # ground = env.get_ground()
+        # print(env.pybullet_client.getContactPoints(bodyA=env._robot.quadruped, bodyB=ground["id"]))
 
     
 
-#     if FLAGS.video_dir:
-#         p.stopStateLogging(log_id)
+    if FLAGS.video_dir:
+        p.stopStateLogging(log_id)

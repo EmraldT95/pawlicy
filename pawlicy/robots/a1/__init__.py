@@ -1,0 +1,1 @@
+from pawlicy.robots.a1.a1 import A1
