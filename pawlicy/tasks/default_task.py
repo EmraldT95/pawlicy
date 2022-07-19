@@ -25,8 +25,6 @@ class DefaultTask(object):
 
   def __init__(self):
     """Initializes the task."""
-    self._draw_ref_model_alpha = 1.
-    self._ref_model = -1
     return
 
   def __call__(self, env):
@@ -50,4 +48,4 @@ class DefaultTask(object):
   def reward(self, env):
     """Get the reward without side effects."""
     del env
-    return 1
+    return 0

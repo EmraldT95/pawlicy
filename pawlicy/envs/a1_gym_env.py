@@ -115,10 +115,8 @@ class A1GymEnv(gym.Env):
 
 			# Rebuild the world.
 			self._world_dict = { 
-				"ground": {
-					"id": terrain_id,
-					"type": terrain_type
-				}
+				"terrain_id": terrain_id,
+				"terrain_type": terrain_type
 			}
 
 			# Rebuild the robot

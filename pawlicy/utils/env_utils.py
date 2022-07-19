@@ -1,93 +1,51 @@
-# coding=utf-8
-# Copyright 2020 The Google Research Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+from tabulate import tabulate
+import logging
+import os
+import copy
+import math
 
-"""Utility functions to manipulate environment."""
+logger = logging.getLogger()
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+def _set_log_lvl(log_level):
+    logging.basicConfig(filename="a1_env.log", filemode='w', level=os.environ.get("LOGLEVEL", log_level))
 
-import collections
-from gym import spaces
-import numpy as np
+def _log(desc="", msg="", level="DEBUG", is_tabular=True, header="firstrow"):
 
-def flatten_observations(observation_dict, observation_excluded=()):
-  """Flattens the observation dictionary to an array.
+    headers = {
+        "joint_infos": ["jointIndex","jointName","jointType", "qIndex", "uIndex", "flags", 
+                        "jointDamping", "jointFriction", "jointLowerLimit", "jointUpperLimit", 
+                        "jointMaxForce", "jointMaxVelocity", "linkName", "jointAxis", "parentFramePos", 
+                        "parentFrameOrn", "parentIndex"
+                        ],
+        "joint_states": ["jointPosition", "jointVelocity", "jointReactionForces", 
+                        "appliedJointMotorTorque"
+                        ],
+        "shape_infos" : ["objectUniqueId", "linkIndex", "visualGeometryType", "dimensions", 
+                        "meshAssetFileName", "localVisualFrame position", "localVisualFrame orientation",
+                        "rgbaColor", "textureUniqueId"
+                        ],
+        "link_states" : ["linkWorldPosition", "linkWorldOrientation", "localInertialFramePosition", 
+                        "localInertialFrameOrientation", "worldLinkFramePosition", "worldLinkFrameOrientation",
+                        "worldLinkLinearVelocity", "worldLinkAngularVelocity",
+                        ],
+        "link_angular_velocities" : ["dR", "dP", "dY"]
+    }
 
-  If observation_excluded is passed in, it will still return a dictionary,
-  which includes all the (key, observation_dict[key]) in observation_excluded,
-  and ('other': the flattened array).
-
-  Args:
-    observation_dict: A dictionary of all the observations.
-    observation_excluded: A list/tuple of all the keys of the observations to be
-      ignored during flattening.
-
-  Returns:
-    An array or a dictionary of observations based on whether
-      observation_excluded is empty.
-  """
-  if not isinstance(observation_excluded, (list, tuple)):
-    observation_excluded = [observation_excluded]
-  observations = []
-  for key, value in observation_dict.items():
-    if key not in observation_excluded:
-      observations.append(np.asarray(value).flatten())
-  flat_observations = np.concatenate(observations)
-  if not observation_excluded:
-    return flat_observations
-  else:
-    observation_dict_after_flatten = {"other": flat_observations}
-    for key in observation_excluded:
-      observation_dict_after_flatten[key] = observation_dict[key]
-    return collections.OrderedDict(
-        sorted(list(observation_dict_after_flatten.items())))
+    if is_tabular:
+        logger.debug(f"{desc} : \n{tabulate(msg, headers=headers[header])}")
+    else:
+        logger.debug(f"{desc} : {msg}")
 
 
-def flatten_observation_spaces(observation_spaces, observation_excluded=()):
-  """Flattens the dictionary observation spaces to gym.spaces.Box.
+def MapToMinusPiToPi(angle):
+    """Maps as angle to [-pi, pi].
 
-  If observation_excluded is passed in, it will still return a dictionary,
-  which includes all the (key, observation_spaces[key]) in observation_excluded,
-  and ('other': the flattened Box space).
-
-  Args:
-    observation_spaces: A dictionary of all the observation spaces.
-    observation_excluded: A list/tuple of all the keys of the observations to be
-      ignored during flattening.
-
-  Returns:
-    A box space or a dictionary of observation spaces based on whether
-      observation_excluded is empty.
-  """
-  if not isinstance(observation_excluded, (list, tuple)):
-    observation_excluded = [observation_excluded]
-  lower_bound = []
-  upper_bound = []
-  for key, value in observation_spaces.spaces.items():
-    if key not in observation_excluded:
-      lower_bound.append(np.asarray(value.low).flatten())
-      upper_bound.append(np.asarray(value.high).flatten())
-  lower_bound = np.concatenate(lower_bound)
-  upper_bound = np.concatenate(upper_bound)
-  observation_space = spaces.Box(
-      np.array(lower_bound), np.array(upper_bound), dtype=np.float32)
-  if not observation_excluded:
-    return observation_space
-  else:
-    observation_spaces_after_flatten = {"other": observation_space}
-    for key in observation_excluded:
-      observation_spaces_after_flatten[key] = observation_spaces[key]
-    return spaces.Dict(observation_spaces_after_flatten)
+    Args:
+      angle: The angle in rad.
+    """
+    mapped_angle = math.fmod(angle, 2 * math.pi)
+    if mapped_angle >= math.pi:
+        mapped_angle -= 2 * math.pi
+    elif mapped_angle < -math.pi:
+        mapped_angle += 2 * math.pi
+    return mapped_angle

@@ -1,3 +1,4 @@
+from faulthandler import disable
 import numpy as np
 from pawlicy.envs.terrains import constants as terrain_constants 
 
@@ -6,12 +7,14 @@ class WalkAlongX(object):
     def __init__(self,
                 forward_reward_cap: float = float("inf"),
                 distance_weight: float = 1.0,
+                displacement_weight: float = 1.0,
+                velocity_weight: float = 1.0,
                 # energy_weight=0.0005,
                 shake_weight: float = 0.005,
                 drift_weight: float = 2.0,
-                action_cost_weight: float = 0.5, 
+                action_cost_weight: float = 0.02, 
                 # deviation_weight: float = 1,
-                roll_threshold: float = np.pi * 0.3,
+                roll_threshold: float = np.pi * 1/2,
                 pitch_threshold: float = 0.8,
                 enable_z_limit: bool = True,
                 healthy_z_limit: float = 0.05,
@@ -22,6 +25,8 @@ class WalkAlongX(object):
         self._forward_reward_cap = forward_reward_cap
         self._action_cost_weight = action_cost_weight
         self._distance_weight = distance_weight
+        self._displacement_weight = displacement_weight
+        self._velocity_weight = velocity_weight
         self._shake_weight = shake_weight
         self._drift_weight = drift_weight
         # self._deviation_weight = deviation_weight
@@ -39,7 +44,6 @@ class WalkAlongX(object):
         self._env = env
         self._init_base_pos = env.robot.GetBasePosition()
         self._current_base_pos = env.robot.GetBasePosition()
-        # self._last_base_pos = self._current_base_pos
         
         self._current_base_vel = env.robot.GetBaseVelocity()
         # self._alive_time_reward = 0
@@ -53,7 +57,7 @@ class WalkAlongX(object):
         """Updates the internal state of the task.
         Evoked after call to a1.A1.Step(), ie after action takes effect in simulation
         """
-        # self.last_base_pos = self._current_base_pos
+        self._last_base_pos = env.last_base_position
         self._current_base_pos = env.robot.GetBasePosition()
 
         self._current_base_vel = env.robot.GetBaseVelocity()
@@ -72,61 +76,58 @@ class WalkAlongX(object):
 
     def reward(self, env):
         """Get the reward without side effects."""
-        # del env
-        # # the far the better..
-        x_velocity_reward = self._current_base_vel[0]
+        # the faster the better (only in x-direction)
+        velocity_reward = np.dot([1, -1, 0], self._current_base_vel)
+        velocity_reward = velocity_reward * self._velocity_weight
 
-        
-        # y_deviation_cost = self._deviation_weight * self.current_base_pos[1] ** 2 
-
-        # total = x_velocity_reward + self._alive_time_reward \
-        #         - action_cost - y_deviation_cost
-
-        # the far the better..
+        # the further away from the iniial position, the better (only in x-direction)
         forward_reward = self._current_base_pos[0] - self._init_base_pos[0]
         # Cap the forward reward if a cap is set.
         forward_reward = min(forward_reward, self._forward_reward_cap)
-        # Rewarded if moving forward, else penalize
-        forward_reward = forward_reward * (self._distance_weight if forward_reward > 0 else -0.2)
+        forward_reward = forward_reward * self._distance_weight
+        # # Rewarded if moving forward, else penalize
+        # forward_reward = forward_reward * (self._distance_weight if forward_reward > 0 else -0.2)
+
+        # How much further it has moved from the previous position
+        displacement_reward = self._current_base_pos[0] - self._last_base_pos[0]
+        displacement_reward = displacement_reward * self._displacement_weight
 
         # Cost of executing action
-        action_cost = self._action_cost_weight * np.linalg.norm(self._last_action)
-        action_cost = action_cost * self._action_cost_weight
+        action_reward = -self._action_cost_weight * np.linalg.norm(self._last_action) / 12
 
         # Penalty for sideways translation.
         drift_reward = -abs(self._current_base_pos[1])
         drift_reward = drift_reward * self._drift_weight
 
-        # # Penalty for sideways rotation of the body.
-        # orientation = env.robot.GetBaseOrientation()
-        # rot_matrix = env.pybullet_client.getMatrixFromQuaternion(orientation)
-        # local_up_vec = rot_matrix[6:]
-        # shake_reward = -abs(np.dot(np.asarray([1, 1, 0]), np.asarray(local_up_vec)))
-        # # Penalty for Energy consumption
-        # energy_reward = -np.abs(np.dot(env.robot.GetMotorTorques(), env.robot.GetMotorVelocities())) * env.sim_time_step
-        # objectives = [forward_reward, energy_reward, drift_reward, shake_reward]
-        # weighted_objectives = [o * w for o, w in zip(objectives, self._objective_weights)]
-        reward = forward_reward + action_cost + drift_reward + x_velocity_reward
+        # # # Penalty for sideways rotation of the body.
+        # # orientation = env.robot.GetBaseOrientation()
+        # # rot_matrix = env.pybullet_client.getMatrixFromQuaternion(orientation)
+        # # local_up_vec = rot_matrix[6:]
+        # # shake_reward = -abs(np.dot(np.asarray([1, 1, 0]), np.asarray(local_up_vec)))
+        # # # Penalty for Energy consumption
+        # # energy_reward = -np.abs(np.dot(env.robot.GetMotorTorques(), env.robot.GetMotorVelocities())) * env.sim_time_step
+        # # objectives = [forward_reward, energy_reward, drift_reward, shake_reward]
+        # # weighted_objectives = [o * w for o, w in zip(objectives, self._objective_weights)]
+        # reward = forward_reward + action_cost + drift_reward + x_velocity_reward
                     
-                    # drift_reward * self._drift_weight + \
-                    # shake_reward * self._shake_weight + \
-        
+        #             # drift_reward * self._drift_weight + \
+        #             # shake_reward * self._shake_weight + \
+
+        #orientation_reward = -sum(abs(self._current_base_ori_euler - self._init_base_ori_euler))
+
+        reward = velocity_reward + forward_reward + displacement_reward + action_reward + drift_reward
+
         if self.is_healthy(env):
             reward += self.healthy_reward
         return reward 
     
     def is_healthy(self, env):
-        # Check for counterclockwise rotation along x-axis (in radians)
-        # if self.enable_roll_limit and (self._current_base_ori_euler[0] < -self.healthy_roll_limit or \
-        #     self._current_base_ori_euler[0] > self.healthy_roll_limit):
-        #     return False
-
         # Checking if robot is in contact with the ground
         foot_links = env.robot.GetFootLinkIDs()
-        ground = env.get_ground()
+        ground = env.world_dict["terrain_id"]
         # Skip the first env step
         if env.env_step_counter > 0:
-            robot_ground_contacts = env.pybullet_client.getContactPoints(bodyA=env.robot.quadruped, bodyB=ground["id"])
+            robot_ground_contacts = env.pybullet_client.getContactPoints(bodyA=env.robot.quadruped, bodyB=ground)
             for contact in robot_ground_contacts:
                 # Only the toes of the robot should in contact with the ground
                 if contact[3] not in foot_links:
@@ -134,21 +135,23 @@ class WalkAlongX(object):
                     return False
 
             # The robot shouldn't be flipped, so limit the Roll and Pitch
-            # if self._current_base_ori_euler[0] > self.roll_threshold or self._current_base_ori_euler[0] < -self.roll_threshold:
-            #     return False
+            if self._current_base_ori_euler[0] > self.roll_threshold or self._current_base_ori_euler[0] < -self.roll_threshold:
+                return False
             # if self._current_base_ori_euler[1] > self.pitch_threshold or self._current_base_ori_euler[1] < -self.pitch_threshold:
             #     return False
 
+            # Isuue - needs to account for heightfield data
+            if self.enable_z_limit and self._current_base_pos[2] < self.healthy_z_limit:
+                return False
             # Issue - needs to account for heightfield data
-            if self.enable_z_limit:
-                z_upper_limit = self._init_base_pos[2] + self.healthy_z_limit * 2
-                # Random terrains don't have fixed heights in every run. Hence initial position of
-                # the robot is generally higher than usual. Taking that under consideration
-                if env.world_dict["ground"]["type"] != "plain":
-                    z_upper_limit += 0.1
-                # Robot shouldn't be above the limit
-                if self._current_base_pos[2] > z_upper_limit:
-                    # print("z_fail: Current=", self._current_base_pos[2], ",\tLimit=", z_lower_limit)
-                    return False
+            # if self.enable_z_limit:
+            #     z_upper_limit = self._init_base_pos[2] + self.healthy_z_limit * 2
+            #     # Random terrains don't have fixed heights in every run. Hence initial position of
+            #     # the robot is generally higher than usual. Taking that under consideration
+            #     if env.world_dict["ground"]["type"] != "plain":
+            #         z_upper_limit += 0.1
+            #     # Robot shouldn't be above the limit
+            #     if self._current_base_pos[2] > z_upper_limit:
+            #         return False
         return True
 

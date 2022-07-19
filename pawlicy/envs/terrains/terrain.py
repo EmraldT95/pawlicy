@@ -18,7 +18,6 @@ class Terrain:
     
     def generate_terrain(self):
         self._pybullet_client.setAdditionalSearchPath(pd.getDataPath())
-        self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_RENDERING, 0)
 
         # Check whether we want one the pre-existing terrain data in pybullet or to generate a random one
         if self._type == "random":
@@ -69,5 +68,4 @@ class Terrain:
 
         # Set the position and orientation of the terrain in the simulator
         self._pybullet_client.resetBasePositionAndOrientation(terrain_id, constants.TERRAIN_INIT_POSITION[self._type], BASE_ORIENTATION)
-        self._pybullet_client.configureDebugVisualizer(self._pybullet_client.COV_ENABLE_RENDERING, 1)
         return terrain_id, self._type

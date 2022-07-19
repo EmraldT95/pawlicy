@@ -94,7 +94,7 @@ class A1(object):
         action_repeat=10,
         sensors=None,
         control_latency=0.002,
-        enable_action_interpolation=True,
+        enable_action_interpolation=False,
         enable_action_filter=False,
         reset_time=1,
         self_collision_enabled=False,

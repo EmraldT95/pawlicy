@@ -1,11 +1,12 @@
 from pawlicy import learning
-from pawlicy.envs import A1GymEnv
+from pawlicy.envs import A1GymEnv, SampleEnv
 from pawlicy.envs.gym_config import LocomotionGymConfig
 from pawlicy.robots import robot_config
 from pawlicy.robots.a1 import constants
 from pawlicy.sensors import robot_sensors
 from pawlicy.tasks import walk_along_x
 from pawlicy.learning import Trainer, utils
+from pawlicy.utils import env_utils
 
 import os
 import inspect
@@ -48,18 +49,26 @@ def build_env(randomise_terrain, motor_control_mode, enable_rendering):
     ]
 
     env = A1GymEnv(gym_config=gym_config, robot_sensors=sensors, task=task)
+    # env = SampleEnv(enable_rendering,
+    #                 randomise_terrain=randomise_terrain,
+    #                 motor_control_mode=motor_control_mode,
+    #                 task=task)
 
     return env
 
 def main():
 
     arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('--log_lvl', "-ll", dest="log_lvl", default="DEBUG", type=str, help='set log level')
     arg_parser.add_argument("--visualize", dest="visualize", type=bool, default=False)
     arg_parser.add_argument("--motor_control_mode", dest="motor_control_mode", type=str, default="Position")
     arg_parser.add_argument("--train", dest="train", type=bool, default=False)
     arg_parser.add_argument("--randomise_terrain", dest="randomise_terrain", type=bool, default=False)
     arg_parser.add_argument("--total_timesteps", dest="total_timesteps", type=int, default=int(1e6))
     args = arg_parser.parse_args()
+
+    # Set the logger level
+    env_utils._set_log_lvl(args.log_lvl)
 
     # Training
     if args.train:
@@ -97,8 +106,7 @@ def main():
     else:
         test_env = build_env(randomise_terrain=args.randomise_terrain,
                     motor_control_mode=MOTOR_CONTROL_MODE_MAP[args.motor_control_mode],
-                    enable_rendering=True)
-                    
+                    enable_rendering=True)        
         Trainer(test_env, algorithm="SAC").test(SAVE_DIR)
 
 if __name__ == "__main__":
