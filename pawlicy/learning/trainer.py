@@ -66,6 +66,8 @@ class Trainer:
         # Create the directory to store the logs in
         log_dir = os.path.join(SAVE_DIR, "logs")
         os.makedirs(log_dir, exist_ok=True)
+        eval_log_dir = os.path.join(SAVE_DIR, "eval_logs")
+        os.makedirs(eval_log_dir, exist_ok=True)
 
         # Check which algorithm to use
         if self._algorithm == "SAC":
@@ -81,6 +83,7 @@ class Trainer:
                                 log_interval=100,
                                 eval_env=self._eval_env,
                                 eval_freq=eval_frequency,
+                                eval_log_path=eval_log_dir,
                                 reset_num_timesteps=False,
                                 callback=TensorboardCallback())
         else:
@@ -105,7 +108,7 @@ class Trainer:
             # Create the directory to save the models in.
             os.makedirs(save_path, exist_ok=True)
             self._model.save(os.path.join(save_path, f"{self._algorithm}"))
-            # self._model.save_replay_buffer(os.path.join(save_path, f"{self._algorithm}_replay_buffer"))
+            self._model.save_replay_buffer(os.path.join(save_path, f"{self._algorithm}_replay_buffer"))
             print(f"Model saved in path: {save_path}")
 
     def test(self, model_path=None):
@@ -117,7 +120,7 @@ class Trainer:
         """
         if model_path is not None:
             self._model = SAC.load(os.path.join(model_path, f"{self._algorithm}"))
-            # self._model.load_replay_buffer(os.path.join(model_path, f"{self._algorithm}_replay_buffer"))
+            self._model.load_replay_buffer(os.path.join(model_path, f"{self._algorithm}_replay_buffer"))
 
         obs = self._env.reset()
         for _ in range(500):
@@ -164,10 +167,11 @@ class TensorboardCallback(BaseCallback):
     """
 
     def __init__(self, verbose=0):
+        self._best_reward = 0
         super(TensorboardCallback, self).__init__(verbose)
 
     def _on_training_start(self):
-        self._log_freq = 100  # log every 1000 calls
+        self._log_freq = 10000  # log every 10000 calls
 
         output_formats = self.logger.output_formats
         # Save reference to tensorboard formatter object
@@ -175,6 +179,16 @@ class TensorboardCallback(BaseCallback):
         self.tb_formatter = next(formatter for formatter in output_formats if isinstance(formatter, TensorBoardOutputFormat))
 
     def _on_step(self) -> bool:
+        local_env = self.training_env.venv.envs[0]
+
+        # Find the best reward
+        reward = np.max(np.array(local_env.episode_returns)) if len(local_env.episode_returns) > 0 else 0
+        self._best_reward = self._best_reward if self._best_reward > reward else reward
+
         if self.n_calls % self._log_freq == 0:
-            self.tb_formatter.writer.add_scalar("x_position", self.training_env.venv.envs[0].robot.GetBasePosition()[0], self.num_timesteps)
+            self.tb_formatter.writer.add_scalar("x_position", local_env.robot.GetBasePosition()[0], self.num_timesteps)
+            self.tb_formatter.writer.add_scalar("y_position", local_env.robot.GetBasePosition()[1], self.num_timesteps)
+            self.tb_formatter.writer.add_scalar("z_position", local_env.robot.GetBasePosition()[2], self.num_timesteps)
+            self.tb_formatter.writer.add_scalar("x_velocity", local_env.robot.GetBaseVelocity()[0], self.num_timesteps)
+            self.tb_formatter.writer.add_scalar("best_reward", self._best_reward, self.num_timesteps)
             self.tb_formatter.writer.flush()
