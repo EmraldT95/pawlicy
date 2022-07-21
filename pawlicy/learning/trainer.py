@@ -1,13 +1,20 @@
 import os
+import inspect
 
 from gym.wrappers import TimeLimit
+import numpy as np
 from stable_baselines3 import SAC
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.logger import TensorBoardOutputFormat
 
 from pawlicy.envs.wrappers import NormalizeActionWrapper
 from pawlicy.learning import utils
+
+currentdir = os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))
+SAVE_DIR = os.path.join(currentdir, "agents")
 
 class Trainer:
     """
@@ -56,18 +63,31 @@ class Trainer:
                 "total_timesteps": n_timesteps
             }
 
+        # Create the directory to store the logs in
+        log_dir = os.path.join(SAVE_DIR, "logs")
+        os.makedirs(log_dir, exist_ok=True)
+
         # Check which algorithm to use
         if self._algorithm == "SAC":
             self._model = SAC(env=self._env,
                                 verbose=1,
-                                learning_rate=utils.lr_schedule(lr, **lr_scheduler_args) if scheduler_type is not None else lr, 
+                                learning_rate=utils.lr_schedule(lr, **lr_scheduler_args) if scheduler_type is not None else lr,
+                                tensorboard_log=log_dir,
                                 **hyperparameters)
 
         # Train the model (check if evaluation is needed)
         if self._eval_env is not None:
-            self._model.learn(n_timesteps, log_interval=100, eval_env=self._eval_env, eval_freq=eval_frequency)
+            self._model.learn(n_timesteps,
+                                log_interval=100,
+                                eval_env=self._eval_env,
+                                eval_freq=eval_frequency,
+                                reset_num_timesteps=False,
+                                callback=TensorboardCallback())
         else:
-            self._model.learn(n_timesteps, log_interval=100)
+            self._model.learn(n_timesteps,
+                                log_interval=100,
+                                reset_num_timesteps=False,
+                                callback=TensorboardCallback())
 
         # Return the trained model
         return self._model
@@ -85,7 +105,7 @@ class Trainer:
             # Create the directory to save the models in.
             os.makedirs(save_path, exist_ok=True)
             self._model.save(os.path.join(save_path, f"{self._algorithm}"))
-            self._model.save_replay_buffer(os.path.join(save_path, f"{self._algorithm}_replay_buffer"))
+            # self._model.save_replay_buffer(os.path.join(save_path, f"{self._algorithm}_replay_buffer"))
             print(f"Model saved in path: {save_path}")
 
     def test(self, model_path=None):
@@ -97,7 +117,7 @@ class Trainer:
         """
         if model_path is not None:
             self._model = SAC.load(os.path.join(model_path, f"{self._algorithm}"))
-            self._model.load_replay_buffer(os.path.join(model_path, f"{self._algorithm}_replay_buffer"))
+            # self._model.load_replay_buffer(os.path.join(model_path, f"{self._algorithm}_replay_buffer"))
 
         obs = self._env.reset()
         for _ in range(500):
@@ -137,3 +157,24 @@ class Trainer:
     @max_episode_steps.setter
     def max_episode_steps(self, value):
         self._max_episode_steps = value
+
+class TensorboardCallback(BaseCallback):
+    """
+    Custom callback for plotting additional values in tensorboard.
+    """
+
+    def __init__(self, verbose=0):
+        super(TensorboardCallback, self).__init__(verbose)
+
+    def _on_training_start(self):
+        self._log_freq = 100  # log every 1000 calls
+
+        output_formats = self.logger.output_formats
+        # Save reference to tensorboard formatter object
+        # note: the failure case (not formatter found) is not handled here, should be done with try/except.
+        self.tb_formatter = next(formatter for formatter in output_formats if isinstance(formatter, TensorBoardOutputFormat))
+
+    def _on_step(self) -> bool:
+        if self.n_calls % self._log_freq == 0:
+            self.tb_formatter.writer.add_scalar("x_position", self.training_env.venv.envs[0].robot.GetBasePosition()[0], self.num_timesteps)
+            self.tb_formatter.writer.flush()

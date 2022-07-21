@@ -34,7 +34,7 @@ def build_env(randomise_terrain, motor_control_mode, enable_rendering):
     gym_config.enable_rendering = enable_rendering
     gym_config.motor_control_mode = motor_control_mode
     gym_config.reset_time = 2
-    gym_config.num_action_repeat = 10
+    gym_config.num_action_repeat = 5
     gym_config.enable_action_interpolation = True
     gym_config.enable_action_filter = False
     gym_config.enable_clip_motor_commands = True
@@ -59,19 +59,20 @@ def build_env(randomise_terrain, motor_control_mode, enable_rendering):
 def main():
 
     arg_parser = argparse.ArgumentParser()
-    arg_parser.add_argument('--log_lvl', "-ll", dest="log_lvl", default="DEBUG", type=str, help='set log level')
-    arg_parser.add_argument("--visualize", dest="visualize", type=bool, default=False)
-    arg_parser.add_argument("--motor_control_mode", dest="motor_control_mode", type=str, default="Position")
-    arg_parser.add_argument("--train", dest="train", type=bool, default=False)
-    arg_parser.add_argument("--randomise_terrain", dest="randomise_terrain", type=bool, default=False)
-    arg_parser.add_argument("--total_timesteps", dest="total_timesteps", type=int, default=int(1e6))
+    # arg_parser.add_argument('--log_lvl', "-ll", dest="log_lvl", default="DEBUG", type=str, help='set log level')
+    arg_parser.add_argument('--visualize', "-v", dest="visualize", action="store_true", help='To flip rendering behaviour')
+    arg_parser.add_argument("--motor_control_mode", "-mcm", dest="motor_control_mode",  default="Position", choices=["Position", "Torque", "Velocity"],
+        type=str, help="to set motor control mode")
+    arg_parser.add_argument("--randomise_terrain", "-rt", dest="randomise_terrain", default=False, type=bool, help="to setup a randommized terrain")
+    arg_parser.add_argument('--total_timesteps', "-tts", dest="total_timesteps", default=int(1e6), type=int, help='total number of training steps')
+    arg_parser.add_argument('--mode', "-m", dest="mode", default="test", choices=["train", "test"], type=str, help='to set to training or testing mode')
     args = arg_parser.parse_args()
 
     # Set the logger level
-    env_utils._set_log_lvl(args.log_lvl)
+    # env_utils._set_log_lvl(args.log_lvl)
 
     # Training
-    if args.train:
+    if args.mode == "train":
         env = build_env(randomise_terrain=args.randomise_terrain,
                     motor_control_mode=MOTOR_CONTROL_MODE_MAP[args.motor_control_mode],
                     enable_rendering=args.visualize)
@@ -92,8 +93,6 @@ def main():
         override_hyperparams = {
             "n_timesteps": args.total_timesteps,
             "learning_starts": 1000,
-            "learning_rate_scheduler": "cosine", # Uses the default learning rate as the initial value
-            "learning_rate": int(1e-3),
         }
 
         # Train the agent

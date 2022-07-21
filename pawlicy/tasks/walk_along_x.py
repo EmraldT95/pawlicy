@@ -5,13 +5,12 @@ from pawlicy.envs.terrains import constants as terrain_constants
 class WalkAlongX(object):
     """Task to walk along a straight line (x-axis)"""
     def __init__(self,
-                forward_reward_cap: float = float("inf"),
-                distance_weight: float = 1.0,
-                displacement_weight: float = 1.0,
+                distance_weight: float = 2.0,
+                displacement_weight: float = 1.5,
                 velocity_weight: float = 1.0,
                 # energy_weight=0.0005,
                 shake_weight: float = 0.005,
-                drift_weight: float = 2.0,
+                drift_weight: float = 1.0,
                 action_cost_weight: float = 0.02, 
                 # deviation_weight: float = 1,
                 roll_threshold: float = np.pi * 1/2,
@@ -21,8 +20,6 @@ class WalkAlongX(object):
                 healthy_reward=1.0,
                 ):
         """Initializes the task."""
-
-        self._forward_reward_cap = forward_reward_cap
         self._action_cost_weight = action_cost_weight
         self._distance_weight = distance_weight
         self._displacement_weight = displacement_weight
@@ -82,11 +79,7 @@ class WalkAlongX(object):
 
         # the further away from the iniial position, the better (only in x-direction)
         forward_reward = self._current_base_pos[0] - self._init_base_pos[0]
-        # Cap the forward reward if a cap is set.
-        forward_reward = min(forward_reward, self._forward_reward_cap)
         forward_reward = forward_reward * self._distance_weight
-        # # Rewarded if moving forward, else penalize
-        # forward_reward = forward_reward * (self._distance_weight if forward_reward > 0 else -0.2)
 
         # How much further it has moved from the previous position
         displacement_reward = self._current_base_pos[0] - self._last_base_pos[0]
