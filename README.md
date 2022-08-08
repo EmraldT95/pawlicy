@@ -19,6 +19,7 @@ The available command line flags are
   --total_timesteps, -tts       Allowed values: 1000000<em>(Default)</em>, can be any integer value.
   --path, -p                    Path to save to model to or load the model from.
   --max_episode_steps, -mes     Allowed values: 1000<em>(Default)</em>, can be any integer value.
-  --total_num_eps, -tne         Allowed values: 20<em>(Default)</em>, can be any integer value and is used only in testing.
+  --total_num_eps, -tne         Allowed values: 20<em>(Default)</em>, can be any integer value
+                                  and is used only in testing.
   --load_final_model, -lfm      If set, loads the final model instead of the best model.
 </pre>
