@@ -1,82 +1,92 @@
-"""Simple script for executing random actions on A1 robot."""
+import os
+import inspect
+import argparse
+
+from pawlicy.envs import A1PosEnv, A1TorEnv
+from pawlicy.learning import Trainer
+from pawlicy.tasks.walk_along_x_v8 import WalkAlongX
+
+currentdir = os.path.dirname(os.path.abspath(
+    inspect.getfile(inspect.currentframe())))
+SAVE_DIR = os.path.join(currentdir, "agents")
 
 
-from pawlicy.envs import a1_gym_env
-from pawlicy.envs.gym_config import SimulationParameters, LocomotionGymConfig
-from pawlicy.robots import robot_config
-from pawlicy.robots.a1 import constants
-from pawlicy.envs.wrappers import observation_dictionary_to_array_wrapper, trajectory_generator_wrapper_env, simple_openloop
-from pawlicy.sensors import robot_sensors
+def main():
+    # Getting all the arguments passed
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument('--mode', "-m", dest="mode", default="test", choices=[
+                            "train", "test"], type=str, help='to set to training or testing mode')
+    arg_parser.add_argument("--motor_control_mode", "-mcm", dest="motor_control_mode", default="Torque",
+                            choices=["Position", "Torque"], type=str, help="to set motor control mode")
+    arg_parser.add_argument('--visualize', "-v", dest="visualize",
+                            action="store_true", help='To flip rendering behaviour')
+    arg_parser.add_argument("--randomise_terrain", "-rt", dest="randomise_terrain",
+                            default=False, type=bool, help="to setup a randommized terrain")
+    arg_parser.add_argument('--total_timesteps', "-tts", dest="total_timesteps",
+                            default=int(1e6), type=int, help='total number of training steps')
+    arg_parser.add_argument('--algorithm', "-a", dest="algorithm", default="SAC", choices=[
+                            "SAC", "PPO", "TD3"], type=str, help='the algorithm used to train the robot')
+    arg_parser.add_argument('--path', "-p", dest="path",
+                            default='', type=str, help='the path to the saved model')
+    arg_parser.add_argument('--max_episode_steps', "-mes", dest="max_episode_steps",
+                            default=1000, type=int, help='maximum steps per episode')
+    arg_parser.add_argument('--total_num_eps', "-tne", dest="total_num_eps",
+                            default=20, type=int, help='total number of test episodes')
+    arg_parser.add_argument('--load_final_model', "-lfm", dest="load_final_model",
+                            action="store_true", help='Whether to load the final model instead of best model')
+    args = arg_parser.parse_args()
 
-from absl import app
-from absl import flags
-import numpy as np
-from tqdm import tqdm
-import pybullet as p  # pytype: disable=import-error
+    task = WalkAlongX()
 
+    # Setting the save path
+    if args.path != '':
+        path = os.path.join(currentdir, args.path)
+    else:
+        path = os.path.join(SAVE_DIR, args.algorithm)
 
-FLAGS = flags.FLAGS
-flags.DEFINE_enum('robot_type', 'A1', ['A1', 'Laikago'], 'Robot Type.')
-flags.DEFINE_enum('motor_control_mode', 'Torque',
-                  ['Torque', 'Position', 'Hybrid'], 'Motor Control Mode.')
-flags.DEFINE_bool('on_rack', False, 'Whether to put the robot on rack.')
-flags.DEFINE_string('video_dir', None,
-                    'Where to save video (or None for not saving).')
+    # Training
+    if args.mode == "train":
+        if args.motor_control_mode == "Torque":
+            env = A1TorEnv(args, args.visualize, task)
+            eval_env = A1TorEnv(args, False, task)
+        else:
+            env = A1PosEnv(randomise_terrain=args.randomise_terrain,
+                        motor_control_mode=args.motor_control_mode,
+                        enable_rendering=args.visualize,
+                        task=task)
 
-# ROBOT_CLASS_MAP = {'A1': a1.A1, 'Laikago': laikago.Laikago}
+            eval_env = A1PosEnv(randomise_terrain=args.randomise_terrain,
+                                motor_control_mode=args.motor_control_mode,
+                                enable_rendering=False,
+                                task=task)
 
-MOTOR_CONTROL_MODE_MAP = {
-    'Torque': robot_config.MotorControlMode.TORQUE,
-    'Position': robot_config.MotorControlMode.POSITION,
-    'Hybrid': robot_config.MotorControlMode.HYBRID
-}
+        # Get the trainer
+        local_trainer = Trainer(env, args, eval_env, path)
 
-def main(_):
-    sim_params = SimulationParameters()
-    sim_params.enable_rendering = True
-    sim_params.motor_control_mode = MOTOR_CONTROL_MODE_MAP[FLAGS.motor_control_mode]
-    sim_params.reset_time = 2
-    sim_params.num_action_repeat = 10
-    sim_params.enable_action_interpolation = False
-    sim_params.enable_action_filter = False
-    sim_params.enable_clip_motor_commands = False
-    sim_params.robot_on_rack = False
+        # The hyperparameters to override/add for the specific algorithm
+        # (Check 'learning/hyperparams.yml' for default values)
+        override_hyperparams = {
+            "n_timesteps": args.total_timesteps,
+            # "learning_rate_scheduler": "linear"
+        }
 
-    gym_config = LocomotionGymConfig(simulation_parameters=sim_params)
-    sensors = [
-        robot_sensors.BaseDisplacementSensor(),
-        robot_sensors.IMUSensor(),
-        robot_sensors.MotorAngleSensor(num_motors=constants.NUM_MOTORS),
-    ]
+        # Train the agent
+        _ = local_trainer.train(override_hyperparams)
 
-    env = a1_gym_env.A1GymEnv(gym_config=gym_config, robot_sensors=sensors, randomize_terrain=True) # task=task)
-    env = observation_dictionary_to_array_wrapper.ObservationDictionaryToArrayWrapper(env)
-    env = trajectory_generator_wrapper_env.TrajectoryGeneratorWrapperEnv(env,
-        trajectory_generator=simple_openloop.LaikagoPoseOffsetGenerator(action_limit=6.28318548203))
+        # Save the model after training
+        local_trainer.save_model()
 
-    action_low, action_high = env.action_space.low, env.action_space.high
-    action_median = (action_low + action_high) / 2.
-    dim_action = action_low.shape[0]
-    action_selector_ids = []
-    for dim in range(dim_action):
-        action_selector_id = p.addUserDebugParameter(paramName='dim{}'.format(dim),
-                                                    rangeMin=action_low[dim],
-                                                    rangeMax=action_high[dim],
-                                                    startValue=action_median[dim])
-        action_selector_ids.append(action_selector_id)
+    # Testing
+    else:
+        if args.motor_control_mode == "Torque":
+            test_env = A1TorEnv(args, True, task)
+        else:
+            test_env = A1PosEnv(randomise_terrain=args.randomise_terrain,
+                                motor_control_mode=args.motor_control_mode,
+                                enable_rendering=True,
+                                task=task)
+        Trainer(test_env, args, save_path=path).test()
 
-    if FLAGS.video_dir:
-        log_id = p.startStateLogging(p.STATE_LOGGING_VIDEO_MP4, FLAGS.video_dir)
-
-    for _ in tqdm(range(800)):
-        action = np.zeros(dim_action)
-        for dim in range(dim_action):
-            action[dim] = env.pybullet_client.readUserDebugParameter(
-            action_selector_ids[dim])
-        env.step(action)
-
-    if FLAGS.video_dir:
-        p.stopStateLogging(log_id)
 
 if __name__ == "__main__":
-  app.run(main)
+    main()

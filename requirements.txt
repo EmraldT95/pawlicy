@@ -1,0 +1,13 @@
+absl-py==1.2.0
+numba==0.55.2
+gym==0.21.0
+matplotlib==3.5.2
+numpy==1.21.6
+stable-baselines3==1.6.0
+pybullet==3.2.5
+PyYAML==6.0
+perlin-noise==1.12
+--find-links https://download.pytorch.org/whl/torch_stable.html
+torch==1.12.0+cu113
+tensorboard==2.9.1
+git+https://github.com/yxyang/locomotion_simulation@master#egg=locomotion_simulation
