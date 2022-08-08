@@ -26,7 +26,7 @@ NUM_LEGS = 4
 NUM_MOTORS_PER_LEG = 3
 INIT_HIP_ANGLE = 0
 INIT_UPPER_ANGLE = 0.9
-INIT_LOWER_ANGLE = -1.6
+INIT_LOWER_ANGLE = -1.8
 INIT_MOTOR_ANGLES = np.array([INIT_HIP_ANGLE, INIT_UPPER_ANGLE, INIT_LOWER_ANGLE] * NUM_LEGS)
 HIP_NAME_PATTERN = re.compile(r"\w+_hip_\w+")
 UPPER_NAME_PATTERN = re.compile(r"\w+_upper_\w+")
@@ -254,27 +254,25 @@ class A1_rex:
     def GetObservation(self):
         observation = []
         observation.extend(self.GetMotorAngles()) # [0:12]
-        observation.extend(self.GetMotorVelocities()) # [12:24]
-        observation.extend(self.GetMotorTorques()) # [24:36]
-        observation.extend(self.GetBaseRollPitchYaw()) # [36:39]
-        observation.extend(self.GetBaseRollPitchYawRate()) # [39:42]
+        observation.extend(self.GetBaseOrientation()) # [12:16]
+        observation.extend(self.GetBaseRollPitchYawRate()) # [16:19]
+        observation.extend(self.GetBasePosition()) # [19:22]
         # Base displacement
-        dx, dy, dz = self._current_base_position - self._last_base_position
-        observation.extend(np.array([dx, dy, dz])) # [42:45]
+        # dx, dy, dz = self._current_base_position - self._last_base_position
+        # observation.extend(np.array([dx, dy, dz])) # [42:45]
         return observation
 
     def GetTrueObservation(self):
         observation = []
         observation.extend(self.GetTrueMotorAngles()) # [0:12]
-        observation.extend(self.GetTrueMotorVelocities()) # [12:24]
-        observation.extend(self.GetTrueMotorTorques()) # [24:36]
-        observation.extend(self.GetTrueBaseRollPitchYaw()) # [36:39]
-        observation.extend(self.GetTrueBaseRollPitchYawRate()) # [39:42]
+        observation.extend(self.GetTrueBaseOrientation()) # [12:16]
+        observation.extend(self.GetTrueBaseRollPitchYawRate()) # [16:19]
+        observation.extend(self.GetBasePosition()) # [19:22]
         # Base displacement
-        self._last_yaw = self._current_yaw
-        self._current_yaw = self.GetTrueBaseRollPitchYaw()[2]
-        dx, dy, dz = self._current_base_position - self._last_base_position
-        observation.extend(np.array([dx, dy, dz])) # [42:45]
+        # self._last_yaw = self._current_yaw
+        # self._current_yaw = self.GetTrueBaseRollPitchYaw()[2]
+        # dx, dy, dz = self._current_base_position - self._last_base_position
+        # observation.extend(np.array([dx, dy, dz])) # [42:45]
         return observation
 
     def GetBasePosition(self):
@@ -313,7 +311,8 @@ class A1_rex:
           A tuple (roll, pitch, yaw) of the base in world frame polluted by noise
           and latency.
         """
-        delayed_orientation = np.array(self._control_observation[3 * self.num_motors:3 * self.num_motors + 4])
+        # delayed_orientation = np.array(self._control_observation[3 * self.num_motors:3 * self.num_motors + 4])
+        delayed_orientation = np.array(self._control_observation[self.num_motors:self.num_motors + 4])
         delayed_roll_pitch_yaw = self._pybullet_client.getEulerFromQuaternion(delayed_orientation)
         roll_pitch_yaw = self._AddSensorNoise(np.array(delayed_roll_pitch_yaw), self._observation_noise_stdev[3])
         return roll_pitch_yaw
@@ -420,14 +419,18 @@ class A1_rex:
           and latency.
         """
         return self._AddSensorNoise(
-            np.array(self._control_observation[3 * self.num_motors + 4:3 * self.num_motors + 7]),
+            # np.array(self._control_observation[3 * self.num_motors + 4:3 * self.num_motors + 7]),
+            np.array(self._control_observation[self.num_motors + 4:self.num_motors + 7]),
             self._observation_noise_stdev[4])
 
     def _SetDesiredMotorAngleById(self, motor_id, desired_angle, max_force):
         self._pybullet_client.setJointMotorControl2(bodyIndex=self._robot_id,
                                                     jointIndex=motor_id,
                                                     controlMode=self._pybullet_client.POSITION_CONTROL,
-                                                    targetPosition=desired_angle)
+                                                    targetPosition=desired_angle,
+                                                    positionGain=self._kp,
+                                                    velocityGain=self._kd,
+                                                    force=max_force)
 
     def GetJointLimits(self):
         """Gets the joint limits (angle, torque and velocity) of the robot"""
@@ -576,3 +579,7 @@ class A1_rex:
     @property
     def last_action(self):
         return self._last_action
+
+    @property
+    def observation_history(self):
+        return self._observation_history

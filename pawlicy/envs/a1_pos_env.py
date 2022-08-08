@@ -3,6 +3,7 @@ import gym
 import numpy as np
 import pybullet as p
 import pybullet_data as pbd
+import itertools
 
 from pybullet_utils.bullet_client import BulletClient
 from gym.utils import seeding
@@ -252,16 +253,14 @@ class A1PosEnv(gym.Env):
 
         upper_bound = np.concatenate((upper_bound, joint_limits["upper"]))  # Joint angle.
         lower_bound = np.concatenate((lower_bound, joint_limits["lower"]))
-        upper_bound = np.concatenate((upper_bound, joint_limits["velocity"]))  # Joint velocity.
-        lower_bound = np.concatenate((lower_bound, -joint_limits["velocity"]))
-        upper_bound = np.concatenate((upper_bound, joint_limits["torque"]))  # Joint torque.
-        lower_bound = np.concatenate((lower_bound, -joint_limits["torque"]))
-        upper_bound = np.concatenate((upper_bound, np.array([2.0 * np.pi] * 3)))  # Roll, Yaw and Pitch
-        lower_bound = np.concatenate((lower_bound, np.array([-2.0 * np.pi] * 3)))
+        upper_bound = np.concatenate((upper_bound, np.array([2.0 * np.pi] * 4)))  # Orientation Quaternion
+        lower_bound = np.concatenate((lower_bound, np.array([-2.0 * np.pi] * 4)))
         upper_bound = np.concatenate((upper_bound, np.array([2000.0 * np.pi] * 3)))  # Angular velocities (From locomotion IMU sensor)
         lower_bound = np.concatenate((lower_bound, np.array([-2000.0 * np.pi] * 3)))
-        upper_bound = np.concatenate((upper_bound, np.array([0.1] * 3)))  # Base Displacement
-        lower_bound = np.concatenate((lower_bound, np.array([-0.1] * 3)))
+        upper_bound = np.concatenate((upper_bound, np.array([100] * 3)))  # Base Position
+        lower_bound = np.concatenate((lower_bound, np.array([-100] * 3)))
+        upper_bound = np.concatenate((upper_bound, np.tile(upper_bound, 4)))  # History (Past 5 observations)
+        lower_bound = np.concatenate((lower_bound, np.tile(lower_bound, 4)))
         
         if upper_bound.shape[0] != observation_length or lower_bound.shape[0] != observation_length:
             raise ValueError("The observation has a different space than the observation space.")
@@ -290,6 +289,23 @@ class A1PosEnv(gym.Env):
 
         observation = self._robot.GetObservation()
         self._observation = np.asarray(observation, dtype=np.float32)
+
+        # Using 4 historical observations
+        history_len = len(self._robot.observation_history)
+        if history_len > 0:
+            history =  np.array([])
+            # Fill the first few entries with the latest observation if the size is less than 4
+            if history_len < 4:
+                for _ in range(4-history_len):
+                    history = np.append(history, self._robot.observation_history[0])
+            # Get the deque values into an array and then append to the observation
+            current_history = list(itertools.islice(self._robot.observation_history, 0, 4))
+            for i in range(len(current_history)):
+                history = np.concatenate((history, current_history[i]))
+        else:
+            history = np.array([observation] * 4).tolist()
+
+        self._observation = np.concatenate((self._observation, history))
         return self._observation
 
     def _get_true_observation(self):
