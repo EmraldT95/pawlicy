@@ -1,12 +1,23 @@
 import os
+import inspect
+from xml.dom import NotFoundErr
 
+import numpy as np
 from gym.wrappers import TimeLimit
-from stable_baselines3 import SAC
+from stable_baselines3 import SAC, PPO, TD3
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.noise import NormalActionNoise
+from stable_baselines3.common.callbacks import CallbackList
 
 from pawlicy.envs.wrappers import NormalizeActionWrapper
+from pawlicy.learning import utils
+
+currentdir = os.path.dirname(os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe()))))
+SAVE_DIR = os.path.join(currentdir, "agents")
+
+ALGORITHMS = {"SAC": SAC, "PPO": PPO, "TD3": TD3}
 
 class Trainer:
     """
@@ -15,92 +26,231 @@ class Trainer:
 
     Args:
         env: The gym environment to train on.
+        eval_env: The environment to evaluate on
         algorithm: The algorithm to use.
         max_episode_steps: The no. of steps per episode
     """
-    def __init__(self, env, algorithm, max_episode_steps=100):
-        self._env = env
-        self._algorithm = algorithm
-        self._max_episode_steps = max_episode_steps
-        self.setup_env(self._max_episode_steps)
+    def __init__(self, env, args, eval_env=None, save_path=None):
+        self._eval_env = eval_env
+        self._algorithm = args.algorithm
+        self._max_episode_steps = args.max_episode_steps
+        self._env = self.setup_env(env, self._max_episode_steps)
+        self._save_path = save_path
+        self._args = args
+        # Setup the evaluation environment as well, if available
+        if eval_env is not None:
+            self._eval_env = self.setup_env(eval_env, self._max_episode_steps // 2)
 
-    def train(self, hyperparameters, n_timesteps: int(1e5), eval_env=None):
+    def train(self, override_hyperparams={}):
         """
         Trains an agent to use the environment to maximise the rewards while performing
         a specific task. This will tried out with multiple other algorithms later for
         benchmarking purposes.
 
         Args:
-            env: The gym environment to train the agent on.
-            algorithm: The algorithm to use
-            hyperparameters: The hyperparameters to use
-            n_timesteps: The number of timesteps to train
-            eval_env: The gym environment used for evaluation.
+            override_hyperparams: The hyperparameters to override/add to the default config
         """
-        # Check which algorithm to use
-        if self._algorithm == "SAC":
-            self._model = SAC(env=self._env, verbose=1, **hyperparameters)
+        # Get the default hyperparameters and override if needed
+        _, hyperparameters = utils.read_hyperparameters(self._algorithm, 1, override_hyperparams)
+
+        # Sanity checks
+        n_timesteps = hyperparameters.pop("n_timesteps", None)
+        if n_timesteps is None:
+            raise ValueError("The hyperparameter 'n_timesteps' is missing.")
+        eval_frequency = hyperparameters.pop("eval_freq", 5000)
+        scheduler_type = hyperparameters.pop("learning_rate_scheduler", None)
+        lr = hyperparameters.pop("learning_rate", float(1e-3))
+        noise_type = hyperparameters.pop("noise_type", "normal")
+        noise_std = hyperparameters.pop("noise_std", 0.0)
+
+        # The noise objects for TD3
+        if self._algorithm == "TD3" or self._algorithm == "DDPG":
+            policy_kwargs = dict(net_arch=[400, 300])
+            if noise_type == "normal":
+                action_noise = NormalActionNoise(mean=np.zeros(12), sigma=noise_std * np.ones(12))
+            # Add these to the hyperparameters
+            hyperparameters.update({"action_noise": action_noise, "policy_kwargs": policy_kwargs})
+
+        # Setup up learning rate scheduler arguments, if needed
+        if scheduler_type is not None:
+            lr_scheduler_args = {
+                "lr_type": scheduler_type,
+                "total_timesteps": n_timesteps,
+                "final_value": 3e-6
+            }
+
+        # Create all the needed directories
+        log_dir, eval_dir = self._create_directories(self._save_path)
+
+        # Use the appropriate algorithm
+        self._model = ALGORITHMS[self._algorithm](env=self._env,
+                                                    verbose=1,
+                                                    learning_rate=utils.lr_schedule(lr, **lr_scheduler_args) if scheduler_type is not None else lr,
+                                                    tensorboard_log=log_dir,
+                                                    **hyperparameters)
 
         # Train the model (check if evaluation is needed)
-        if eval_env is not None:
-            self._model.learn(n_timesteps, log_interval=100, eval_env=eval_env, eval_freq=100)
+        if self._eval_env is not None:
+            eval_callback = utils.Eval_Callback(eval_env=self._eval_env,
+                                        best_model_save_path=eval_dir,
+                                        log_path=eval_dir,
+                                        eval_freq=eval_frequency,
+                                        deterministic=True,
+                                        render=False,
+                                        verbose=1)
+                                        # This is needed to generate the video after evaluation is complete
+                                        # callback_after_eval=utils.After_Eval_Callback(1, eval_dir))
+
+            callbacks = CallbackList([eval_callback, utils.TensorboardCallback(mode=self._args.motor_control_mode)])
+
+            self._model.learn(n_timesteps,
+                                log_interval=1000,
+                                reset_num_timesteps=False,
+                                callback=callbacks)
         else:
-            self._model.learn(n_timesteps, log_interval=100)
+            self._model.learn(n_timesteps,
+                                log_interval=1000,
+                                reset_num_timesteps=False,
+                                callback=utils.TensorboardCallback())
 
         # Return the trained model
         return self._model
 
-    def save_model(self, save_path):
+    def _create_directories(self, save_path=None):
+        """Creates all the directories to save the logs and the models
+        
+        Args:
+            save_path: The path in which all the directories will be made in.
+
+        Returns:
+            The tensorboard and evaluation log direcrtory paths
         """
-        Saves the trained model. Also saves the replay buffer
+
+        # If no explicit path is mentioned, we create one based the algorithm used to train
+        if save_path is None:
+            self._save_path = os.path.join(SAVE_DIR, f"{self._algorithm}")
+        # Create the directory, if it doesn't exist
+        os.makedirs(self._save_path, exist_ok=True)
+
+        # Where to store the tensorboard logs
+        log_dir = os.path.join(self._save_path, "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        eval_dir = os.path.join(self._save_path, "eval")
+        if self._eval_env:
+            os.makedirs(eval_dir, exist_ok=True)
+
+        return log_dir, eval_dir
+
+    def save_model(self, save_path=None, save_replay_buffer=False):
+        """Saves the trained model. Also saves the replay buffer
 
         Args:
-            model: The trained agent
+            save_path: The path to save the model in
+            save_replay_buffer: Whether to save the replay buffer or not
         """
+
         if save_path is None:
-            raise ValueError("No path specified to save the trained model.")
+            save_path = self._save_path
         else:
-            # Create the directory to save the models in.
             os.makedirs(save_path, exist_ok=True)
-            self._model.save(os.path.join(save_path, f"{self._algorithm}_emrald"))
-            self._model.save_replay_buffer(os.path.join(save_path, f"{self._algorithm}_replay_buffer_emrald"))
+
+        # Save the model
+        self._model.save(os.path.join(save_path, "model"))
+        # Save the replay buffer, only if needed
+        if save_replay_buffer:
+            self._model.save_replay_buffer(os.path.join(save_path, "replay_buffer"))
+
+        print(f"Model saved in path: {save_path}")
+
+    def load_model(self, load_path=None):
+        """Loads a trained model from the given path. Also loads
+        the replay buffer, if available.
+
+        Args:
+            model_path: path to the directory containing the model/replay_buffer
+        """
+        # Loads the best model by default, if not available then loads final model
+        model_path = os.path.join(load_path, "model.zip")
+        best_model_path = os.path.join(load_path, "eval/best_model.zip")
+        if self._args.load_final_model and os.path.exists(model_path):
+            model = ALGORITHMS[self._algorithm].load(model_path)
+        elif os.path.exists(best_model_path):
+            print("Best experiment model is being loaded... ")
+            model = ALGORITHMS[self._algorithm].load(best_model_path)
+        else:
+            raise NotFoundErr(
+                "The model could not be found in the given directory. Please ensure the file is name as 'best_model.zip'.")
+
+        # Load the replay buffer, if the file exists
+        replay_buffer_path = os.path.join(load_path, "replay_buffer.pkl")
+        if os.path.exists(replay_buffer_path):
+            model.load_replay_buffer(replay_buffer_path)
+        
+        return model
+
+    def random(self):
+        """
+        Random actions to be executed
+        """
+        for i in range(self._args.total_num_eps):
+            done = False
+            obs = self._env.reset()
+            while not done:
+                obs, reward, done, info = self._env.step(self._env.action_space.sample())
 
     def test(self, model_path=None):
-        """
-        Tests the agent
+        """Tests the agent
 
         Args:
-            env: The gym environment to test the agent on.
+            model_path: The path to the directory containing the model file
         """
+        # If no explicit path is mentioned, we create one based the algorithm used to train
         if model_path is not None:
-            self._model = SAC.load(os.path.join(model_path, f"{self._algorithm}_emrald"))
-            self._model.load_replay_buffer(os.path.join(model_path, f"{self._algorithm}_replay_buffer_emrald"))
+            self._model = self.load_model(model_path)
+        elif self._save_path is not None:
+            self._model = self.load_model(self._save_path)
+        else:
+            raise ValueError("A path must be provided to load the model.")
 
-        obs = self._env.reset()
-        for _ in range(500):
-            action, _states = self._model.predict(obs, deterministic=True)
-            obs, reward, done, info = self._env.step(action)
-            if done:
-                obs = self._env.reset()
+        returns = []
+        eps_lengths = []
 
-    def setup_env(self, max_episode_steps):
-        """
-        Modifies the environment to suit to the needs of stable_baselines3.
+        for i in range(self._args.total_num_eps):
+            done = False
+            step_counter = 0
+            ep_return = 0 
+            obs = self._env.reset()
+            while not done:
+                action, _states = self._model.predict(obs, deterministic=True)
+                obs, reward, done, info = self._env.step(action)
+                ep_return += reward
+                step_counter += 1
+            
+            returns.append(ep_return)
+            eps_lengths.append(step_counter)
+        
+        print()
+        print(f"Mean return is {np.mean(returns):.2f} +/- {np.std(returns):.2f}") 
+        print(f"Mean episode length is  {np.mean(eps_lengths):.2f} +/- {np.std(eps_lengths):.2f}")
+
+    def setup_env(self, env, max_episode_steps):
+        """Modifies the environment to suit to the needs of stable_baselines3.
 
         Args:
             max_episode_steps: The number of steps per episode
         """
-        self._max_episode_steps = max_episode_steps
         # Normalize the action space
-        self._env = NormalizeActionWrapper(self._env)
+        env = NormalizeActionWrapper(env)
         # Set the number of steps for each episode
-        self._env = TimeLimit(self._env, self._max_episode_steps)
+        env = TimeLimit(env, max_episode_steps)
         # To monitor training stats
-        self._env = Monitor(self._env)
+        env = Monitor(env)
         # a simple vectorized wrapper
-        self._env = DummyVecEnv([lambda: self._env])
+        env = DummyVecEnv([lambda: env])
         # Normalizes the observation space and rewards
-        self._env = VecNormalize(self._env, norm_obs=True, norm_reward=True)
+        env = VecNormalize(env, norm_obs=True, norm_reward=True)
+
+        return env;
 
     @property
     def model(self):
